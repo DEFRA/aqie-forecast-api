@@ -1,4 +1,4 @@
-import { findAllExampleData } from '../../../aqie-forecast-api/src/example-find.js'
+import { findAllExampleData } from '../example-find.js'
 
 const forecast = [
   {
