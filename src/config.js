@@ -99,7 +99,7 @@ const config = convict({
   seedForecastSchedule: {
     doc: 'initial batch process to feed the forecast data (cron format) into db',
     format: String, // TODO: maybe custom validate this
-    default: '0 15-24 * * *',
+    default: '30 16 * * *',
     env: 'SEED_FORECAST_SCHEDULE'
   },
   sftpPrivateKey: {
