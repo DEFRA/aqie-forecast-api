@@ -1,4 +1,5 @@
 import SFTPClient from 'ssh2-sftp-client'
+// import { Client } from 'ssh2'
 // import fs from 'fs';
 import { Buffer } from 'buffer'
 import dayjs from 'dayjs'
@@ -18,7 +19,9 @@ const remotePath = `/Incoming Shares/AQIE/MetOffice/${filename}`
 
 export const fetchForecast = async () => {
   try {
-    const sftp = await connectSftpThroughProxy()
+    logger.info('Before Connection')
+    const { sftp } = await connectSftpThroughProxy()
+    logger.info('After Connection')
     const xmlBuffer = await sftp.get(remotePath)
     const xmlContent = xmlBuffer.toString('utf8')
 
@@ -27,6 +30,7 @@ export const fetchForecast = async () => {
     return parsedData
   } catch (err) {
     logger.error(`[Seeder] Error: ${JSON.stringify(err)}`, err)
+    throw err // rethrow so the caller knows it failed
   }
 }
 
@@ -61,13 +65,17 @@ async function connectSftpThroughProxy() {
   const proxyModule = proxyUrl.protocol.startsWith('https') ? https : http
 
   return new Promise((resolve, reject) => {
+    logger.info(`inside Promise`)
+    logger.info(`privateKey:: ${privateKey}`)
     const req = proxyModule.request(proxyOptions)
     logger.info(`REQUEST:: ${JSON.stringify(req)}`)
     req.on('connect', async (res, socket) => {
       logger.info(`SOCKET:: ${JSON.stringify(socket)}`)
+      logger.info(`RESPONSE:: ${JSON.stringify(res)}`)
       if (res.statusCode !== 200) {
-        logger.error(`[Proxy Error] Failed with status: ${res.statusCode}`)
-        return reject(new Error(`Proxy CONNECT failed: ${res.statusCode}`))
+        const error = new Error(`Proxy CONNECT failed: ${res.statusCode}`)
+        logger.error(`[Proxy Error] Failed with status: ${error.message}`)
+        return reject(error)
       }
 
       logger.info('[Proxy Debug] Tunnel established. Connecting to SFTP...')
@@ -89,6 +97,31 @@ async function connectSftpThroughProxy() {
         logger.error(`[SFTP Connect Error], ${JSON.stringify(err)}`)
         reject(err)
       }
+      // const conn = new Client()
+      // conn
+      //   .on('ready', () => {
+      //     logger.info('SFTP connection established successfully via proxy')
+      //     conn.sftp((err, sftp) => {
+      //       if (err) {
+      //         logger.error(`Failed to initialize SFTP: ${JSON.stringify(err)}`)
+      //         return reject(err)
+      //       }
+      //       resolve({ sftp, conn })
+      //     })
+      //   })
+      //   .on('error', (err) => {
+      //     logger.error(
+      //       `Failed to establish SFTP connection: ${JSON.stringify(err)}`
+      //     )
+      //     reject(err)
+      //   })
+      //   .connect({
+      //     sock: socket,
+      //     host: sftpHost,
+      //     port: sftpPort,
+      //     username,
+      //     privateKey
+      //   })
     })
 
     req.on('error', (err) => {
@@ -102,45 +135,55 @@ async function connectSftpThroughProxy() {
 
 const parseForecastXml = async (xmlString) => {
   logger.info(`inside parseForecastXml function`)
-  const parsed = await xml2js.parseStringPromise(xmlString, {
-    explicitArray: false
-  })
-
-  const sites = parsed.DEFRAAirQuality.site
-  const siteArray = Array.isArray(sites) ? sites : [sites]
-
-  return siteArray.map((site) => {
-    // Construct UTC date from XML attributes
-    const baseDate = dayjs.utc(
-      `${site.$.yr}-${site.$.mon}-${site.$.dayn}T${site.$.hr.slice(0, 2)}:00:00`
-    )
-    //const updatedDate = baseDate.toISOString()
-
-    const forecastDays = Array.isArray(site.day) ? site.day : [site.day]
-
-    // Build forecast entries starting from the base date
-    const forecast = forecastDays.slice(0, 5).map((d, index) => {
-      return {
-        day: baseDate.add(index, 'day').format('ddd'),
-        value: parseInt(d.$.aq)
-      }
+  try {
+    const parsed = await xml2js.parseStringPromise(xmlString, {
+      explicitArray: false
     })
 
-    return {
-      name: site.$.lc,
-      updated: baseDate.toDate(),
-      location: {
-        type: 'Point',
-        coordinates: [parseFloat(site.$.lt), parseFloat(site.$.ln)]
-      },
-      forecast
-    }
-  })
+    const sites = parsed.DEFRAAirQuality.site
+    const siteArray = Array.isArray(sites) ? sites : [sites]
+
+    return siteArray.map((site) => {
+      // Construct UTC date from XML attributes
+      const baseDate = dayjs.utc(
+        `${site.$.yr}-${site.$.mon}-${site.$.dayn}T${site.$.hr.slice(0, 2)}:00:00`
+      )
+      //const updatedDate = baseDate.toISOString()
+
+      const forecastDays = Array.isArray(site.day) ? site.day : [site.day]
+
+      // Build forecast entries starting from the base date
+      const forecast = forecastDays.slice(0, 5).map((d, index) => {
+        return {
+          day: baseDate.add(index, 'day').format('ddd'),
+          value: parseInt(d.$.aq)
+        }
+      })
+
+      return {
+        name: site.$.lc,
+        updated: baseDate.toDate(),
+        location: {
+          type: 'Point',
+          coordinates: [parseFloat(site.$.lt), parseFloat(site.$.ln)]
+        },
+        forecast
+      }
+    })
+  } catch (err) {
+    logger.error(`'[XML Parse Error]', ${err}`)
+    throw err
+  }
 }
 
 export const saveForecasts = async (server, forecasts) => {
   try {
     logger.info(`inside saveForecasts function`)
+
+    if (!Array.isArray(forecasts) || forecasts.length === 0) {
+      throw new Error('Invalid or empty forecasts data provided')
+    }
+
     // Create collection if it doesn't exist
     const collections = await server.db
       .listCollections({ name: COLLECTION_NAME })
@@ -166,6 +209,10 @@ export const saveForecasts = async (server, forecasts) => {
     await forecastsCol.insertMany(forecasts)
     logger.info(`[Seeder] Inserted ${forecasts.length} forecast records.`)
   } catch (error) {
-    logger.info(`forecasts update error: ${JSON.stringify(error)}`)
+    logger.error(
+      `forecasts update error: ${JSON.stringify(error)}`,
+      error.stack || error
+    )
+    throw error // rethrow so the caller knows it failed
   }
 }

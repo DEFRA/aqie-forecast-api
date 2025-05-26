@@ -14,9 +14,22 @@ const forecastScheduler = {
       // Start the scheduler
       // await fetchAndSaveForecasts(server)
       logger.info('starting forecasts Scheduler')
-      schedule(config.get('seedForecastSchedule'), async () => {
-        await fetchAndSaveForecasts(server)
-      })
+      logger.info(
+        `Forecasts Scheduler Server time at startup: ${new Date().toString()}`
+      )
+      logger.info(
+        `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
+      )
+      schedule(
+        config.get('seedForecastSchedule'),
+        async () => {
+          logger.info('Cron job triggered')
+          await fetchAndSaveForecasts(server)
+        },
+        {
+          timezone: 'Europe/London' // or 'UTC' if you prefer UTC
+        }
+      )
       logger.info(
         'Inital forecasts Scheduler done! Running once at 3:30am to 12.30pm'
       )
@@ -31,7 +44,8 @@ async function fetchAndSaveForecasts(server) {
     await saveForecasts(server, forecasts)
     logger.info('saveForecasts done!')
   } catch (err) {
-    logger.error('Error fetching and saving forecasts', err)
+    logger.error('Error fetching and saving forecasts', err.stack || err)
+    throw err
   }
   //     finally {
   //       await requireLock(server.db, 'forecasts')
