@@ -20,7 +20,7 @@ const remotePath = `/Incoming Shares/AQIE/MetOffice/${filename}`
 export const fetchForecast = async () => {
   try {
     logger.info('Before Connection')
-    const { sftp, conn } = await connectSftpThroughProxy()
+    const { sftp } = await connectSftpThroughProxy()
     logger.info('After Connection')
     const xmlBuffer = await sftp.get(remotePath)
     const xmlContent = xmlBuffer.toString('utf8')
@@ -211,7 +211,7 @@ export const saveForecasts = async (server, forecasts) => {
   } catch (error) {
     logger.error(
       `forecasts update error: ${JSON.stringify(error)}`,
-      err.stack || err
+      error.stack || error
     )
     throw error // rethrow so the caller knows it failed
   }
