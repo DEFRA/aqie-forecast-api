@@ -90,11 +90,29 @@ const config = convict({
       env: 'MONGO_DATABASE'
     }
   },
+  forecastSchedule: {
+    doc: 'How often to poll the forecast data (cron format)',
+    format: String, // TODO: maybe custom validate this
+    default: '0 05-10 * * *',
+    env: 'FORECAST_SCHEDULE_OPTION_1'
+  },
+  seedForecastSchedule: {
+    doc: 'initial batch process to feed the forecast data (cron format) into db',
+    format: String, // TODO: maybe custom validate this
+    default: '0 15-24 * * *',
+    env: 'SEED_FORECAST_SCHEDULE'
+  },
+  sftpPrivateKey: {
+    doc: 'SSH Private Key - To Fetch Met Office Data From SFTP DEFRA Server',
+    format: String, // TODO: maybe custom validate this
+    default: '',
+    env: 'SSH_PRIVATE_KEY'
+  },
   httpProxy: {
     doc: 'HTTP Proxy URL',
     format: String,
     nullable: true,
-    default: null,
+    default: 'http://localhost:3128',
     env: 'HTTP_PROXY'
   },
   isSecureContextEnabled: {
@@ -108,6 +126,12 @@ const config = convict({
     format: Boolean,
     default: isProduction,
     env: 'ENABLE_METRICS'
+  },
+  allowOriginUrl: {
+    doc: 'URL to Access-Control-Allow-Origin',
+    format: String,
+    default: '',
+    env: 'ACCESS_CONTROL_ALLOW_ORIGIN_URL'
   },
   tracing: {
     header: {
