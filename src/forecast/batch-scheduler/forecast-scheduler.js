@@ -44,7 +44,8 @@ async function fetchAndSaveForecasts(server) {
     await saveForecasts(server, forecasts)
     logger.info('saveForecasts done!')
   } catch (err) {
-    logger.error('Error fetching and saving forecasts', err)
+    logger.error('Error fetching and saving forecasts', err.stack || err)
+    throw err
   }
   //     finally {
   //       await requireLock(server.db, 'forecasts')
