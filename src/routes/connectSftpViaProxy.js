@@ -5,33 +5,32 @@ import { config } from '../config.js'
 import { createLogger } from '../common/helpers/logging/logger.js'
 import { Buffer } from 'buffer'
 // import fs from 'fs'
-import { URL } from 'url'
+// import { URL } from 'url'
 import http from 'http'
-import https from 'https'
+// import https from 'https'
 const logger = createLogger()
 /**
  * Creates an SFTP client via CDP proxy and returns a connected SFTP instance.
  */
 
 export async function connectSftpThroughProxy() {
-  const proxyUrl = new URL(config.get('httpProxy'))
-  const proxyHost = proxyUrl.hostname
-  const proxyPort =
-    proxyUrl.port || (proxyUrl.protocol === 'https:' ? 3128 : 3128)
+  // const proxyUrl = new URL(config.get('httpProxy'))
+  const proxyHost = 'localhost'
+  const proxyPort = 3128
   logger.info(`port::: ${proxyPort}`)
   const sftpHost = 'sftp22.sftp-defra-gov-uk.quatrix.it'
   const sftpPort = 22
 
   logger.info(
-    `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxyurl ${proxyUrl} ${proxyHost}:${proxyPort}`
+    `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxyurl ${proxyHost}:${proxyPort}`
   )
   const proxyOptions = {
     host: proxyHost,
     port: proxyPort,
     method: 'CONNECT',
-    path: `${sftpHost}:${sftpPort}`,
+    path: `sftp22.sftp-defra-gov-uk.quatrix.it:22`,
     headers: {
-      Host: `${sftpHost}:${sftpPort}`
+      Host: `sftp22.sftp-defra-gov-uk.quatrix.it:22`
       // 'Proxy-Authorization': proxyAuthHeader
     }
     // rejectUnauthorized: false // Disable certificate validation
@@ -42,7 +41,7 @@ export async function connectSftpThroughProxy() {
   const privateKeyBase64 = config.get('sftpPrivateKey')
   const privateKey = Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
 
-  const proxyModule = proxyUrl.protocol.startsWith('https') ? https : http
+  const proxyModule = http
   logger.info(`proxyModule::: ${JSON.stringify(proxyModule)}`)
 
   return new Promise((resolve, reject) => {
