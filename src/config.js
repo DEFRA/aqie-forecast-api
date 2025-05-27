@@ -26,7 +26,7 @@ const config = convict({
   port: {
     doc: 'The port to bind',
     format: 'port',
-    default: 3001,
+    default: 3005,
     env: 'PORT'
   },
   serviceName: {
@@ -99,7 +99,8 @@ const config = convict({
   seedForecastSchedule: {
     doc: 'initial batch process to feed the forecast data (cron format) into db',
     format: String, // TODO: maybe custom validate this
-    default: '20 22 * * *',
+    default: '28 11 * * *',
+    // default: '*/5 * * * *',
     env: 'SEED_FORECAST_SCHEDULE'
   },
   sftpPrivateKey: {
