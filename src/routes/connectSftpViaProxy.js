@@ -5,9 +5,9 @@ import { config } from '../config.js'
 import { createLogger } from '../common/helpers/logging/logger.js'
 import { Buffer } from 'buffer'
 // import fs from 'fs'
-import { URL } from 'url'
+// import { URL } from 'url'
 import http from 'http'
-import https from 'https'
+// import https from 'https'
 const logger = createLogger()
 /**
  * Creates an SFTP client via CDP proxy and returns a connected SFTP instance.
