@@ -25,8 +25,6 @@ export async function connectSftpThroughProxy() {
     `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxyurl ${proxyHost}:${proxyPort}`
   )
   const proxyOptions = {
-    host: proxyHost,
-    port: proxyPort,
     method: 'CONNECT',
     path: `sftp22.sftp-defra-gov-uk.quatrix.it:22`,
     headers: {
