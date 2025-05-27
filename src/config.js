@@ -107,7 +107,7 @@ const config = convict({
     doc: 'SSH Private Key - To Fetch Met Office Data From SFTP DEFRA Server',
     format: String, // TODO: maybe custom validate this
     default: '',
-    env: 'SSH_PRIVATE_KEY' 
+    env: 'SSH_PRIVATE_KEY'
   },
   httpProxy: {
     doc: 'HTTP Proxy URL',
