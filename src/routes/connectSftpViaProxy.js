@@ -16,7 +16,7 @@ const logger = createLogger()
 export async function connectSftpThroughProxy() {
   // const proxyUrl = new URL(config.get('httpProxy'))
   const proxyHost = 'localhost'
-  const proxyPort = 3128
+  const proxyPort = 80
   logger.info(`port::: ${proxyPort}`)
   const sftpHost = 'sftp22.sftp-defra-gov-uk.quatrix.it'
   const sftpPort = 22
