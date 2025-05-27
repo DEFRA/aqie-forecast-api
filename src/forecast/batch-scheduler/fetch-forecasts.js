@@ -49,7 +49,7 @@ async function connectSftpThroughProxy() {
   const privateKey = Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
 
   logger.info(
-    `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxy ${proxyHost}:${proxyPort}`
+    `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxy ${proxyUrl} ${proxyHost}:${proxyPort}`
   )
 
   const proxyOptions = {
@@ -63,11 +63,12 @@ async function connectSftpThroughProxy() {
   }
 
   const proxyModule = proxyUrl.protocol.startsWith('https') ? https : http
-
+  logger.info(`proxyModule::: ${JSON.stringify(proxyModule)}`)
   return new Promise((resolve, reject) => {
     logger.info(`inside Promise`)
     logger.info(`privateKey:: ${privateKey}`)
     const req = proxyModule.request(proxyOptions)
+    logger.info(`proxyOptions::: ${JSON.stringify(proxyOptions)}`)
     logger.info(`REQUEST:: ${JSON.stringify(req)}`)
     req.on('connect', async (res, socket) => {
       logger.info(`SOCKET:: ${JSON.stringify(socket)}`)
