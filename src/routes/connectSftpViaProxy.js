@@ -46,7 +46,12 @@ export async function connectSftpThroughProxy() {
     logger.info(`inside Promise`)
     logger.info(`privateKey:: ${privateKey}`)
     const req = proxyModule.request(proxyOptions)
-    logger.info(`REQUEST:: ${JSON.stringify(req)}`)
+    logger.info(`BEFORE REQUEST:: ${JSON.stringify(req)}`)
+    logger.info(`PATH:: ${req.path}`)
+    let str = req.path
+    let str1 = str.replace("http://localhost", "")
+    req.path = str1
+    logger.info(`AFTER REQUEST:: ${JSON.stringify(req)}`)
     req.on('connect', (res, socket) => {
       logger.info(`SOCKET:: ${JSON.stringify(socket)}`)
       logger.info(`RESPONSE:: ${JSON.stringify(res)}`)
