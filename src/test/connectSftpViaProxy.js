@@ -1,23 +1,22 @@
-// import SFTPClient from 'ssh2-sftp-client'
-import { Client } from 'ssh2'
+import SFTPClient from 'ssh2-sftp-client'
+// import { Client } from 'ssh2'
 // import { ProxyAgent } from 'undici'
 import { config } from '../config.js'
 import { createLogger } from '../common/helpers/logging/logger.js'
 import { Buffer } from 'buffer'
-// import fs from 'fs'
+import fs from 'fs'
 import { URL } from 'url'
 import http from 'http'
 import https from 'https'
 const logger = createLogger()
+
 /**
  * Creates an SFTP client via CDP proxy and returns a connected SFTP instance.
  */
-
-export async function connectSftpThroughProxy() {
+async function connectSftpThroughProxy() {
   const proxyUrl = new URL(config.get('httpProxy'))
   const proxyHost = proxyUrl.hostname
-  const proxyPort =
-    proxyUrl.port || (proxyUrl.protocol === 'https:' ? 3128 : 3128)
+  const proxyPort = proxyUrl.port || 3128
   logger.info(`port::: ${proxyPort}`)
   const sftpHost = 'sftp22.sftp-defra-gov-uk.quatrix.it'
   const sftpPort = 22
@@ -32,13 +31,8 @@ export async function connectSftpThroughProxy() {
     path: `${sftpHost}:${sftpPort}`,
     headers: {
       Host: `${sftpHost}:${sftpPort}`
-      // 'Proxy-Authorization': proxyAuthHeader
     }
-    // rejectUnauthorized: false // Disable certificate validation
-    // servername: proxyHost // this ensures the TLS cert matches the expected domain
   }
-
-  // const privateKey = fs.readFileSync('C:/Users/486272/.ssh/met_office_rsa_v1')
   const privateKeyBase64 = config.get('sftpPrivateKey')
   const privateKey = Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
 
@@ -49,8 +43,10 @@ export async function connectSftpThroughProxy() {
     logger.info(`inside Promise`)
     logger.info(`privateKey:: ${privateKey}`)
     const req = proxyModule.request(proxyOptions)
-    logger.info(`REQUEST:: ${JSON.stringify(req)}`)
-    req.on('connect', (res, socket) => {
+    logger.info(`Before REQUEST:: ${JSON.stringify(req)}`)
+    req.on('connect', async (res, socket) => {
+      req.path = `${sftpHost}:${sftpPort}`
+      logger.info(`After REQUEST:: ${JSON.stringify(req)}`)
       logger.info(`SOCKET:: ${JSON.stringify(socket)}`)
       logger.info(`RESPONSE:: ${JSON.stringify(res)}`)
       if (res.statusCode !== 200) {
@@ -60,34 +56,22 @@ export async function connectSftpThroughProxy() {
           )
         )
       }
-
       logger.info('[Proxy Debug] Tunnel established — starting SSH connection')
-
-      const conn = new Client()
-      conn
-        .on('ready', () => {
-          logger.info('SFTP connection established successfully via proxy')
-          conn.sftp((err, sftp) => {
-            if (err) {
-              logger.error(`Failed to initialize SFTP: ${JSON.stringify(err)}`)
-              return reject(err)
-            }
-            resolve({ sftp, conn })
-          })
-        })
-        .on('error', (err) => {
-          logger.error(
-            `Failed to establish SFTP connection: ${JSON.stringify(err)}`
-          )
-          reject(err)
-        })
-        .connect({
+      const sftp = new SFTPClient()
+      try {
+        await sftp.connect({
           sock: socket,
           host: sftpHost,
           port: sftpPort,
           username: 'q2031671',
           privateKey
         })
+        logger.info('[SFTP] Connection established via proxy')
+        resolve(sftp) // Return SFTP client only
+      } catch (err) {
+        logger.error(`[SFTP Connect Error], ${JSON.stringify(err)}`)
+        reject(err)
+      }
     })
     req.on('error', (err) => {
       logger.error(
@@ -98,3 +82,17 @@ export async function connectSftpThroughProxy() {
     req.end()
   })
 }
+
+async function connectLocalSftp() {
+  const sftp = new SFTPClient()
+  const config = {
+    host: 'sftp22.sftp-defra-gov-uk.quatrix.it',
+    port: 22,
+    username: 'q2031671',
+    privateKey: fs.readFileSync('C:/Users/486272/.ssh/met_office_rsa_v1') // Replace with correct path
+  }
+  await sftp.connect(config)
+  return { sftp }
+}
+
+export { connectLocalSftp, connectSftpThroughProxy }
