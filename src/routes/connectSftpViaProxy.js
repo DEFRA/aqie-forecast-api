@@ -14,9 +14,9 @@ const logger = createLogger()
  */
 
 export async function connectSftpThroughProxy() {
-  // const proxyUrl = new URL(config.get('httpProxy'))
-  const proxyHost = 'localhost'
-  const proxyPort = 80
+  const proxyUrl = new URL(config.get('httpProxy'))
+  const proxyHost = proxyUrl.hostname
+  const proxyPort = proxyUrl.port || 3128
   logger.info(`port::: ${proxyPort}`)
   const sftpHost = 'sftp22.sftp-defra-gov-uk.quatrix.it'
   const sftpPort = 22
@@ -26,9 +26,9 @@ export async function connectSftpThroughProxy() {
   )
   const proxyOptions = {
     method: 'CONNECT',
-    path: `sftp22.sftp-defra-gov-uk.quatrix.it:22`,
+    path: `sftp://${sftpHost}:${sftpPort}`,
     headers: {
-      Host: `sftp22.sftp-defra-gov-uk.quatrix.it:22`
+      Host: `${sftpHost}:${sftpPort}`
       // 'Proxy-Authorization': proxyAuthHeader
     }
     // rejectUnauthorized: false // Disable certificate validation
@@ -45,12 +45,11 @@ export async function connectSftpThroughProxy() {
   return new Promise((resolve, reject) => {
     logger.info(`inside Promise`)
     logger.info(`privateKey:: ${privateKey}`)
-    const req = proxyModule.request(proxyOptions)
+    const req = http.request(proxyOptions)
     logger.info(`BEFORE REQUEST:: ${JSON.stringify(req)}`)
-    logger.info(`PATH:: ${req.path}`)
-    let str = req.path
-    let str1 = str.replace("http://localhost", "")
-    req.path = str1
+    logger.info(`BEFORE PATH:: ${req.path}`)
+    req.path = `sftp://${sftpHost}:${sftpPort}`
+    logger.info(`AFTER PATH:: ${req.path}`)
     logger.info(`AFTER REQUEST:: ${JSON.stringify(req)}`)
     req.on('connect', (res, socket) => {
       logger.info(`SOCKET:: ${JSON.stringify(socket)}`)

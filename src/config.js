@@ -113,7 +113,7 @@ const config = convict({
     doc: 'HTTP Proxy URL',
     format: String,
     nullable: true,
-    default: '',
+    default: 'http://localhost:3128',
     env: 'HTTP_PROXY'
   },
   isSecureContextEnabled: {
