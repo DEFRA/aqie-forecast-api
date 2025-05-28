@@ -25,6 +25,8 @@ export async function connectSftpThroughProxy() {
     `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxyurl ${proxyUrl} ${proxyHost}:${proxyPort}`
   )
   const proxyOptions = {
+    host: proxyHost,
+    port: proxyPort,
     method: 'CONNECT',
     path: `sftp://${sftpHost}:${sftpPort}`,
     headers: {
