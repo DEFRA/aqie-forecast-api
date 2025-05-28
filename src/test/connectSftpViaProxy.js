@@ -44,9 +44,9 @@ async function connectSftpThroughProxy() {
     logger.info(`privateKey:: ${privateKey}`)
     const req = proxyModule.request(proxyOptions)
     logger.info(`Before REQUEST:: ${JSON.stringify(req)}`)
+    req.path = `${sftpHost}:${sftpPort}`
+    logger.info(`After REQUEST:: ${JSON.stringify(req)}`)
     req.on('connect', async (res, socket) => {
-      req.path = `${sftpHost}:${sftpPort}`
-      logger.info(`After REQUEST:: ${JSON.stringify(req)}`)
       logger.info(`SOCKET:: ${JSON.stringify(socket)}`)
       logger.info(`RESPONSE:: ${JSON.stringify(res)}`)
       if (res.statusCode !== 200) {
