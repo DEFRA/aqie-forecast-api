@@ -22,7 +22,7 @@ export async function connectSftpThroughProxy() {
   const sftpPort = 22
 
   logger.info(
-    `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxyurl ${proxyHost}:${proxyPort}`
+    `[Proxy Debug] CONNECTING to ${sftpHost}:${sftpPort} via proxyurl ${proxyUrl} ${proxyHost}:${proxyPort}`
   )
   const proxyOptions = {
     method: 'CONNECT',
@@ -48,7 +48,7 @@ export async function connectSftpThroughProxy() {
     const req = http.request(proxyOptions)
     logger.info(`BEFORE REQUEST:: ${JSON.stringify(req)}`)
     logger.info(`BEFORE PATH:: ${req.path}`)
-    req.path = `sftp://${sftpHost}:${sftpPort}`
+    req.path = `${sftpHost}:${sftpPort}`
     logger.info(`AFTER PATH:: ${req.path}`)
     logger.info(`AFTER REQUEST:: ${JSON.stringify(req)}`)
     req.on('connect', (res, socket) => {
