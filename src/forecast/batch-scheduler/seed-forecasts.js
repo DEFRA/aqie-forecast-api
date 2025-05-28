@@ -89,6 +89,6 @@ const parseForecastXml = async (xmlString) => {
 }
 
 // Schedule it to run daily at 5:00 AM
-cron.schedule('35 20 * * *', async () => {
+cron.schedule('55 19 * * *', async () => {
   await runForecastSyncJob()
 })
