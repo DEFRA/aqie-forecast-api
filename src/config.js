@@ -99,7 +99,7 @@ const config = convict({
   seedForecastSchedule: {
     doc: 'initial batch process to feed the forecast data (cron format) into db',
     format: String, // TODO: maybe custom validate this
-    default: '28 11 * * *',
+    default: '15 22 * * *',
     // default: '*/5 * * * *',
     env: 'SEED_FORECAST_SCHEDULE'
   },
