@@ -1,7 +1,15 @@
 /* eslint-disable */
 import { config } from '../config.js'
 import { createLogger } from '../common/helpers/logging/logger.js'
-import { connectSftpThroughProxy } from './connectSftpViaProxy.js'
+import {
+  connectSftpThroughProxy,
+  connectLocalSftp
+} from './connectSftpViaProxy.js'
+import xml2js from 'xml2js'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc.js'
+
+dayjs.extend(utc)
 const logger = createLogger()
 const testController = {
   handler: async (request, h) => {
@@ -14,27 +22,22 @@ const testController = {
 
     try {
       logger.info('Before Connection')
-      const { sftp, conn } = await connectSftpThroughProxy()
+      const { sftp } = await connectSftpThroughProxy()
+      // const { sftp } = await connectLocalSftp()
       logger.info('After Connection')
 
       // List files in the remote directory
-      const fileList = await new Promise((resolve, reject) => {
-        sftp.readdir(remoteDir, (err, list) => {
-          if (err) return reject(err)
-          resolve(list)
-        })
-      })
-      logger.info(
-        'Files in directory:',
-        fileList.map((f) => f.filename)
+      const fileList = await sftp.list(remoteDir)
+      console.log(
+        '📂 Files in directory:',
+        fileList.map((f) => f.name)
       )
-
       // Filter file by exact name
-      const match = fileList.find((file) => file.filename === filename)
-      logger.info(`'Match found:', match`)
+      const match = fileList.find((files) => files.name === filename)
+      console.log('🔍 Match found:', match)
 
       if (!match) {
-        await conn.end()
+        await sftp.end()
         return h
           .response({
             success: false,
@@ -43,18 +46,15 @@ const testController = {
           .code(404)
       }
 
-      // If found, get the file content and download it into a buffer
-      const fileBuffer = await new Promise((resolve, reject) => {
-        sftp.readFile(`${remoteDir}${filename}`, (err, buffer) => {
-          if (err) return reject(err)
-          resolve(buffer)
-        })
-      })
-      await conn.end()
+      // If found, get the file content Download file content into buffer
+      const xmlBuffer = await sftp.get(`${remoteDir}${filename}`)
+      const xmlContent = xmlBuffer.toString('utf8')
 
+      const forecastDocs = await parseForecastXml(xmlContent)
+      await sftp.end()
       return h
-        .response(fileBuffer.toString())
-        .type('application/xml') // or 'text/xml'
+        .response(forecastDocs)
+        .type('application/json') // or 'text/xml'
         .code(200)
         .header('Access-Control-Allow-Origin', allowOriginUrl)
     } catch (error) {
@@ -63,6 +63,49 @@ const testController = {
       logger.error(`'JSON Error listing file:' ${JSON.stringify(error)}`)
       return h.response({ success: false, error: error.message }).code(500)
     }
+  }
+}
+
+const parseForecastXml = async (xmlString) => {
+  logger.info(`inside parseForecastXml function`)
+  try {
+    const parsed = await xml2js.parseStringPromise(xmlString, {
+      explicitArray: false
+    })
+
+    const sites = parsed.DEFRAAirQuality.site
+    const siteArray = Array.isArray(sites) ? sites : [sites]
+
+    return siteArray.map((site) => {
+      // Construct UTC date from XML attributes
+      const baseDate = dayjs.utc(
+        `${site.$.yr}-${site.$.mon}-${site.$.dayn}T${site.$.hr.slice(0, 2)}:00:00`
+      )
+      //const updatedDate = baseDate.toISOString()
+
+      const forecastDays = Array.isArray(site.day) ? site.day : [site.day]
+
+      // Build forecast entries starting from the base date
+      const forecast = forecastDays.slice(0, 5).map((d, index) => {
+        return {
+          day: baseDate.add(index, 'day').format('ddd'),
+          value: parseInt(d.$.aq)
+        }
+      })
+
+      return {
+        name: site.$.lc,
+        updated: baseDate.toDate(),
+        location: {
+          type: 'Point',
+          coordinates: [parseFloat(site.$.lt), parseFloat(site.$.ln)]
+        },
+        forecast
+      }
+    })
+  } catch (err) {
+    logger.error(`'[XML Parse Error]', ${err}`)
+    throw err
   }
 }
 

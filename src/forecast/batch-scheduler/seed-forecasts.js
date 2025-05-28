@@ -1,24 +1,22 @@
-// scripts/seedForecasts.js
-// import cron from 'node-cron'
+import cron from 'node-cron'
 import { MongoClient } from 'mongodb'
-import SFTPClient from 'ssh2-sftp-client'
-import fs from 'fs'
 import dayjs from 'dayjs'
 import { config } from '../../config.js'
 import { createLogger } from '../../common/helpers/logging/logger.js'
 import xml2js from 'xml2js'
 import utc from 'dayjs/plugin/utc.js'
+import { connectSftpThroughProxy } from '../../routes/connectSftpViaProxy.js'
 dayjs.extend(utc)
 
 const logger = createLogger()
 const MONGO_URI = config.get('mongo')
-async function run() {
+async function runForecastSyncJob() {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
 
   const client = new MongoClient(MONGO_URI.uri)
   const today = dayjs().startOf('day').toDate()
   // const filename = `MetOfficeDefraAQSites_${dayjs().format('YYYYMMDD')}.xml`
-  const filename = `MetOfficeDefraAQSites_20250524.xml`
+  const filename = `MetOfficeDefraAQSites_20250526.xml`
   try {
     await client.connect()
     const db = client.db('aqie-forecast-api')
@@ -34,15 +32,7 @@ async function run() {
       )
       return
     }
-    const sftp = new SFTPClient()
-
-    const config = {
-      host: 'sftp22.sftp-defra-gov-uk.quatrix.it',
-      port: 22,
-      username: 'q2031671',
-      privateKey: fs.readFileSync('C:/Users/486272/.ssh/met_office_rsa_v1') // Replace with correct path
-    }
-    await sftp.connect(config)
+    const sftp = await connectSftpThroughProxy()
     const remotePath = `/Incoming Shares/AQIE/MetOffice/${filename}`
 
     const xmlBuffer = await sftp.get(remotePath)
@@ -98,4 +88,7 @@ const parseForecastXml = async (xmlString) => {
   })
 }
 
-run()
+// Schedule it to run daily at 5:00 AM
+cron.schedule('35 20 * * *', async () => {
+  await runForecastSyncJob()
+})
