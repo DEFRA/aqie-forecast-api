@@ -10,6 +10,7 @@ import { pulse } from './common/helpers/pulse.js'
 import { requestTracing } from './common/helpers/request-tracing.js'
 import { setupProxy } from './common/helpers/proxy/setup-proxy.js'
 import { forecastScheduler } from './forecast/batch-scheduler/forecast-scheduler.js'
+import { seedForecastScheduler } from './forecast/batch-scheduler/seed-forecasts.js'
 
 async function createServer() {
   setupProxy()
@@ -53,7 +54,8 @@ async function createServer() {
     pulse,
     mongoDb,
     router,
-    forecastScheduler
+    forecastScheduler,
+    seedForecastScheduler
   ])
 
   return server

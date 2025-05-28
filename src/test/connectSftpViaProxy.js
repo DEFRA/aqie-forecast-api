@@ -67,7 +67,7 @@ async function connectSftpThroughProxy() {
           privateKey
         })
         logger.info('[SFTP] Connection established via proxy')
-        resolve(sftp) // Return SFTP client only
+        resolve({ sftp }) // Return SFTP client only
       } catch (err) {
         logger.error(`[SFTP Connect Error], ${JSON.stringify(err)}`)
         reject(err)
