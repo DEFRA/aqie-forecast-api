@@ -36,6 +36,15 @@ async function runForecastSyncJob(server) {
       logger.info(`[MongoDB] Created collection '${COLLECTION_NAME}'`)
     }
     const forecastsCol = await server.db.collection(COLLECTION_NAME)
+
+    try {
+      // Ensure unique index on 'name'
+      await forecastsCol.createIndex({ name: 1 }, { unique: true })
+      logger.info("Ensured unique index on 'name'")
+    } catch (error) {
+      logger.error("Failed to create index on 'name':", err.message)
+    }
+
     const todayStart = dayjs().utc().startOf('day').toDate()
     // const todayStart = new Date('2025-05-26T00:00:00.000Z')
     logger.info(`todayStart:: ${todayStart}`)
@@ -80,20 +89,19 @@ async function runForecastSyncJob(server) {
               )
               logger.info(typeof parsedForecasts[0].updated)
               logger.info(parsedForecasts[0].updated)
-              // await forecastsCol.insertMany(forecastDocs)
-
               logger.info(
                 `[Seeder] Inserted ${parsedForecasts.length} forecast records.`
               )
-              const bulkOps = parsedForecasts.map((forecast) => ({
+
+              const bulkOps = (forecast) => ({
                 replaceOne: {
                   filter: { name: forecast.name },
-                  replacement: { forecast },
+                  replacement: forecast,
                   upsert: true // if not found, insert it
                 }
-              }))
+              })
 
-              await forecastsCol.bulkWrite(bulkOps)
+              await forecastsCol.bulkWrite(parsedForecasts.map(bulkOps))
 
               logger.info(
                 `[DB] Forecasts inserted successfully for ${parsedForecasts.length} locations.`
@@ -182,7 +190,7 @@ const seedForecastScheduler = {
         `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
       )
       schedule(
-        '00 06 * * *',
+        '15 13 * * *',
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)
