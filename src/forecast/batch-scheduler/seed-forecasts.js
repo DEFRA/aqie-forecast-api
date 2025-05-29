@@ -27,7 +27,8 @@ async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
   const filename = getExpectedFileName()
   try {
-    await server.db.getCollection("forecasts").deleteMany({})
+    await server.db.getCollection('forecasts').deleteMany({})
+    logger.info(`db cleaned up`)
     const collections = await server.db
       .listCollections({ name: COLLECTION_NAME })
       .toArray()
@@ -42,8 +43,8 @@ async function runForecastSyncJob(server) {
       // Ensure unique index on 'name'
       await forecastsCol.createIndex({ name: 1 }, { unique: true })
       logger.info("Ensured unique index on 'name'")
-    } catch (error) {
-      logger.error("Failed to create index on 'name':", err.message)
+    } catch (err) {
+      logger.error(`"Failed to create index on 'name':", ${err.message}`)
     }
 
     const todayStart = dayjs().utc().startOf('day').toDate()
@@ -136,6 +137,7 @@ async function runForecastSyncJob(server) {
   } catch (err) {
     logger.error(`[Scheduler Error] ${err.message}`)
     logger.error(`JSON [Scheduler Error] ${JSON.stringify(err)}`)
+    throw err
   }
 }
 
