@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { schedule } from 'node-cron'
 // import { MongoClient } from 'mongodb'
 import dayjs from 'dayjs'
@@ -5,23 +6,28 @@ import { config } from '../../config.js'
 import { createLogger } from '../../common/helpers/logging/logger.js'
 import xml2js from 'xml2js'
 import utc from 'dayjs/plugin/utc.js'
-import { connectSftpThroughProxy } from '../../test/connectSftpViaProxy.js'
+import {
+  connectSftpThroughProxy,
+  connectLocalSftp
+} from '../../test/connectSftpViaProxy.js'
 dayjs.extend(utc)
 
 const logger = createLogger()
-// const MONGO_URI = config.get('mongo')
 const COLLECTION_NAME = 'forecasts'
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const getExpectedFileName = () => {
+  const today = dayjs().format('YYYYMMDD')
+  return `MetOfficeDefraAQSites_${today}.xml` //MetOfficeDefraAQSites_20250425.xml
+  // return `MetOfficeDefraAQSites_20250525.xml`
+}
 
 async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
 
-  // const client = new MongoClient(MONGO_URI.uri)
-  // const today = dayjs().startOf('day').toDate()
-  // const filename = `MetOfficeDefraAQSites_${dayjs().format('YYYYMMDD')}.xml`
-  const filename = `MetOfficeDefraAQSites_20250526.xml`
+  const filename = getExpectedFileName()
   try {
-    // await client.connect()
-    // const db = server.db('aqie-forecast-api')
     const collections = await server.db
       .listCollections({ name: COLLECTION_NAME })
       .toArray()
@@ -31,9 +37,12 @@ async function runForecastSyncJob(server) {
       logger.info(`[MongoDB] Created collection '${COLLECTION_NAME}'`)
     }
     const forecastsCol = await server.db.collection(COLLECTION_NAME)
-    const todayStart = dayjs().startOf('day').toDate()
-    const todayEnd = dayjs().endOf('day').toDate()
-
+    const todayStart = dayjs().utc.startOf('day').toDate()
+    // const todayStart = new Date('2025-05-26T00:00:00.000Z')
+    logger.info(`todayStart:: ${todayStart}`)
+    const todayEnd = dayjs().utc.endOf('day').toDate()
+    // const todayEnd = new Date('2025-05-26T23:59:59.999Z')
+    logger.info(`todayEnd:: ${todayEnd}`)
     const exists = await forecastsCol.countDocuments({
       updated: { $gte: todayStart, $lte: todayEnd }
     })
@@ -44,46 +53,78 @@ async function runForecastSyncJob(server) {
       )
       return
     }
-    const { sftp } = await connectSftpThroughProxy()
-    const remotePath = `/Incoming Shares/AQIE/MetOffice/${filename}`
+    const pollUntilFound = async () => {
+      while (true) {
+        logger.info(`[SFTP] Connecting to check for file ${filename}`)
+        try {
+          const { sftp } = await connectSftpThroughProxy()
+          // const { sftp } = await connectLocalSftp()
+          const remotePath = `/Incoming Shares/AQIE/MetOffice/`
 
-    const xmlBuffer = await sftp.get(remotePath)
-    const xmlContent = xmlBuffer.toString('utf8')
+          const files = await sftp.list(remotePath)
+          logger.info(`[SFTP] Files List ${files} found.`)
+          const fileFound = files.find((files) => files.name === filename)
+          logger.info(`[SFTP] File Match ${fileFound} found.`)
 
-    let parsedForecasts
-    try {
-      parsedForecasts = await parseForecastXml(xmlContent)
-    } catch (err) {
-      logger.error(
-        `[XML Parsing Error] Failed to parse forecast XML: ${err.message}`
-      )
-      throw err
-    }
+          if (fileFound) {
+            logger.info(`[SFTP] File ${filename} found. Fetching content...`)
+            const fileContent = await sftp.get(`${remotePath}${filename}`)
+            await sftp.end()
+            let parsedForecasts
+            try {
+              parsedForecasts = await parseForecastXml(fileContent)
+              logger.info(
+                `PARSED XML FILE CONTENT :: ${JSON.stringify(parsedForecasts[0], null, 2)}`
+              )
+              logger.info(typeof parsedForecasts[0].updated)
+              logger.info(parsedForecasts[0].updated)
+              // await forecastsCol.insertMany(forecastDocs)
 
-    logger.info(
-      `PARSED XML FILE CONTENT :: ${JSON.stringify(parsedForecasts[0], null, 2)}`
-    )
-    logger.info(typeof parsedForecasts[0].updated)
-    logger.info(parsedForecasts[0].updated)
-    // await forecastsCol.insertMany(forecastDocs)
+              logger.info(
+                `[Seeder] Inserted ${parsedForecasts.length} forecast records.`
+              )
+              const bulkOps = parsedForecasts.map((forecast) => ({
+                replaceOne: {
+                  filter: { name: forecast.name },
+                  replacement: { forecast },
+                  upsert: true // if not found, insert it
+                }
+              }))
 
-    logger.info(`[Seeder] Inserted ${parsedForecasts.length} forecast records.`)
-    const bulkOps = parsedForecasts.map((forecast) => ({
-      replaceOne: {
-        filter: { name: forecast.name },
-        replacement: { forecast },
-        upsert: true // if not found, insert it
+              await forecastsCol.bulkWrite(bulkOps)
+
+              logger.info(
+                `[DB] Forecasts inserted successfully for ${parsedForecasts.length} locations.`
+              )
+
+              break
+            } catch (err) {
+              logger.error(
+                `[XML Parsing Error] Failed to parse forecast XML: ${err.message}`
+              )
+              throw err
+            }
+          } else {
+            logger.info(
+              `[SFTP] File ${filename} not found. Retrying in 15 mins.`
+            )
+            await sftp.end()
+            await sleep(15 * 60 * 1000)
+          }
+        } catch (err) {
+          logger.error(`[Error] While checking SFTP: ${err.message}`)
+          logger.error(
+            `JSON [Error] While checking SFTP: ${JSON.stringify(err)}`
+          )
+          logger.info('[Retry] Waiting 15 mins before next attempt.')
+          await sleep(15 * 60 * 1000)
+        }
       }
-    }))
-
-    await forecastsCol.bulkWrite(bulkOps)
-
-    logger.info(
-      `[DB] Forecasts inserted successfully for ${parsedForecasts.length} locations.`
-    )
-    await sftp.end()
+    }
+    await pollUntilFound()
   } catch (err) {
-    logger.error(`[Seeder] Error: ${JSON.stringify(err)}`, err)
+    logger.error(`[Scheduler Error] ${err.message}`)
+    logger.error(`JSON [Scheduler Error] ${JSON.stringify(err)}`)
   }
 }
 
@@ -139,7 +180,7 @@ const seedForecastScheduler = {
         `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
       )
       schedule(
-        '15 22 * * *',
+        '00 07 * * *',
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)
