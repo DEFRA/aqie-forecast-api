@@ -27,6 +27,7 @@ async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
   const filename = getExpectedFileName()
   try {
+    await server.db.getCollection("forecasts").deleteMany({})
     const collections = await server.db
       .listCollections({ name: COLLECTION_NAME })
       .toArray()
