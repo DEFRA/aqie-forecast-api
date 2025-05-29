@@ -84,6 +84,7 @@ async function connectSftpThroughProxy() {
 }
 
 async function connectLocalSftp() {
+  logger.info(`inside local connectLocalSftp`)
   const sftp = new SFTPClient()
   const config = {
     host: 'sftp22.sftp-defra-gov-uk.quatrix.it',
@@ -92,6 +93,7 @@ async function connectLocalSftp() {
     privateKey: fs.readFileSync('C:/Users/486272/.ssh/met_office_rsa_v1') // Replace with correct path
   }
   await sftp.connect(config)
+  logger.info(`successfully established connection to sftp server`)
   return { sftp }
 }
 
