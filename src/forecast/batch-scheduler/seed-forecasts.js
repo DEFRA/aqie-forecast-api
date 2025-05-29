@@ -25,7 +25,6 @@ const getExpectedFileName = () => {
 
 async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
-
   const filename = getExpectedFileName()
   try {
     const collections = await server.db
@@ -37,10 +36,10 @@ async function runForecastSyncJob(server) {
       logger.info(`[MongoDB] Created collection '${COLLECTION_NAME}'`)
     }
     const forecastsCol = await server.db.collection(COLLECTION_NAME)
-    const todayStart = dayjs().utc.startOf('day').toDate()
+    const todayStart = dayjs().utc().startOf('day').toDate()
     // const todayStart = new Date('2025-05-26T00:00:00.000Z')
     logger.info(`todayStart:: ${todayStart}`)
-    const todayEnd = dayjs().utc.endOf('day').toDate()
+    const todayEnd = dayjs().utc().endOf('day').toDate()
     // const todayEnd = new Date('2025-05-26T23:59:59.999Z')
     logger.info(`todayEnd:: ${todayEnd}`)
     const exists = await forecastsCol.countDocuments({
@@ -62,9 +61,12 @@ async function runForecastSyncJob(server) {
           const remotePath = `/Incoming Shares/AQIE/MetOffice/`
 
           const files = await sftp.list(remotePath)
-          logger.info(`[SFTP] Files List ${files} found.`)
-          const fileFound = files.find((files) => files.name === filename)
-          logger.info(`[SFTP] File Match ${fileFound} found.`)
+
+          logger.info(`[SFTP] Files List ${JSON.stringify(files)} found.`)
+          const fileFound = files.find(
+            (files) => files.name.trim() === filename.trim()
+          )
+          logger.info(`[SFTP] File Match ${JSON.stringify(fileFound)} found.`)
 
           if (fileFound) {
             logger.info(`[SFTP] File ${filename} found. Fetching content...`)
@@ -180,7 +182,7 @@ const seedForecastScheduler = {
         `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
       )
       schedule(
-        '00 07 * * *',
+        '00 06 * * *',
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)
