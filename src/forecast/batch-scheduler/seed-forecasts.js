@@ -194,7 +194,7 @@ const seedForecastScheduler = {
         `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
       )
       schedule(
-        '35 10 * * *',
+        '50 09 * * *',
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)
