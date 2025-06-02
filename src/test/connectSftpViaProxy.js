@@ -42,6 +42,7 @@ async function connectSftpThroughProxy() {
   return new Promise((resolve, reject) => {
     logger.info(`inside Promise`)
     logger.info(`privateKey:: ${privateKey}`)
+    logger.info(`logger.gobalhttp:: ${JSON.stringify(http.globalAgent)}`)
     const req = proxyModule.request(proxyOptions)
     logger.info(`Before REQUEST:: ${JSON.stringify(req)}`)
     req.path = `${sftpHost}:${sftpPort}`
@@ -85,6 +86,7 @@ async function connectSftpThroughProxy() {
 
 async function connectLocalSftp() {
   logger.info(`inside local connectLocalSftp`)
+  logger.info(`logger.gobalhttp:: ${JSON.stringify(http.globalAgent)}`)
   const sftp = new SFTPClient()
   const config = {
     host: 'sftp22.sftp-defra-gov-uk.quatrix.it',
