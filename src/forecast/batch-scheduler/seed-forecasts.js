@@ -28,7 +28,7 @@ async function runForecastSyncJob(server) {
   const filename = getExpectedFileName()
   logger.info(`filename::: ${filename}`)
   try {
-    await server.db.collection('forecasts').deleteMany({})
+    // await server.db.collection('forecasts').deleteMany({})
     logger.info(`db cleaned up`)
     const collections = await server.db
       .listCollections({ name: COLLECTION_NAME })
@@ -74,7 +74,7 @@ async function runForecastSyncJob(server) {
 
           const files = await sftp.list(remotePath)
 
-          logger.info(`[SFTP] Files List ${JSON.stringify(files)} found.`)
+          // logger.info(`[SFTP] Files List ${JSON.stringify(files)} found.`)
           const fileFound = files.find(
             (files) => files.name.trim() === filename.trim()
           )
@@ -194,7 +194,7 @@ const seedForecastScheduler = {
         `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
       )
       schedule(
-        '50 09 * * *',
+        '40 10 * * *',
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)
