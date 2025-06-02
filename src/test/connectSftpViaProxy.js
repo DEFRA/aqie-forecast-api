@@ -42,7 +42,6 @@ async function connectSftpThroughProxy() {
   return new Promise((resolve, reject) => {
     logger.info(`inside Promise`)
     logger.info(`privateKey:: ${privateKey}`)
-    logger.info(`http.globalAgent:: ${http.globalAgent}`)
     const req = proxyModule.request(proxyOptions)
     logger.info(`Before REQUEST:: ${JSON.stringify(req)}`)
     req.path = `${sftpHost}:${sftpPort}`
