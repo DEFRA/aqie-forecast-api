@@ -203,7 +203,7 @@ const seedForecastScheduler = {
         //   timezone: 'Europe/London' // or 'UTC' if you prefer UTC
         // }
       )
-      logger.info('Inital forecasts Scheduler done! Running at 5am to 10am')
+      logger.info('Inital forecasts Scheduler done! Running at 5am')
     }
   }
 }
