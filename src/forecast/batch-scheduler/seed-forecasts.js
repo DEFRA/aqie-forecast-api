@@ -26,6 +26,7 @@ const getExpectedFileName = () => {
 async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
   const filename = getExpectedFileName()
+  logger.info(`filename::: ${filename}`)
   try {
     await server.db.collection('forecasts').deleteMany({})
     logger.info(`db cleaned up`)
@@ -193,7 +194,7 @@ const seedForecastScheduler = {
         `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
       )
       schedule(
-        '49 09 * * *',
+        '35 10 * * *',
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)
