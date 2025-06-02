@@ -193,7 +193,7 @@ const seedForecastScheduler = {
         `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
       )
       schedule(
-        '00 04 * * *',
+        '49 09 * * *',
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)
@@ -202,7 +202,7 @@ const seedForecastScheduler = {
         //   timezone: 'Europe/London' // or 'UTC' if you prefer UTC
         // }
       )
-      logger.info('Inital forecasts Scheduler done! Running at 5am to 10am')
+      logger.info('Inital forecasts Scheduler done! Running at 5am')
     }
   }
 }
