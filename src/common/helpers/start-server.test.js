@@ -51,6 +51,10 @@ describe('#startServer', () => {
       await server.stop({ timeout: 0 })
     })
 
+    afterEach(() => {
+      jest.clearAllMocks()
+    })
+
     test('Should start up server as expected', async () => {
       server = await startServerImport.startServer()
 

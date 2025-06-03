@@ -15,18 +15,24 @@ dayjs.extend(utc)
 const logger = createLogger()
 const COLLECTION_NAME = 'forecasts'
 
+/**
+ * sleep is implemented using this helper function
+ * and it's used in two places inside the pollUntilFound function
+ * The sleep is triggered in two scenarios:
+ * 1) File Not Found on SFTP: then script waits 15 minutes before trying again
+ * 2) Error While Connecting to SFTP: If there's an error during the SFTP connection
+ * then script logs the error and waits 15 minutes before retrying.*/
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const getExpectedFileName = () => {
   const today = dayjs().format('YYYYMMDD')
   return `MetOfficeDefraAQSites_${today}.xml` //MetOfficeDefraAQSites_20250425.xml
-  // return `MetOfficeDefraAQSites_20250525.xml`
 }
 
 async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
   const filename = getExpectedFileName()
-  logger.info(`filename::: ${filename}`)
+  logger.info(`Today's Forecast Filename::: ${filename}`)
   try {
     // await server.db.collection('forecasts').deleteMany({})
     logger.info(`db cleaned up`)
@@ -45,15 +51,16 @@ async function runForecastSyncJob(server) {
       await forecastsCol.createIndex({ name: 1 }, { unique: true })
       logger.info("Ensured unique index on 'name'")
     } catch (err) {
-      logger.error(`"Failed to create index on 'name':", ${err.message}`)
+      logger.error(`"Failed to create index on 'name':", ${err.message}`, err)
     }
 
     const todayStart = dayjs().utc().startOf('day').toDate()
     // const todayStart = new Date('2025-05-26T00:00:00.000Z')
-    logger.info(`todayStart:: ${todayStart}`)
     const todayEnd = dayjs().utc().endOf('day').toDate()
-    // const todayEnd = new Date('2025-05-26T23:59:59.999Z')
-    logger.info(`todayEnd:: ${todayEnd}`)
+    logger.info(
+      `Checking for forecasts between ${todayStart.toISOString()} and ${todayEnd.toISOString()}`
+    )
+
     const exists = await forecastsCol.countDocuments({
       updated: { $gte: todayStart, $lte: todayEnd }
     })
@@ -64,6 +71,10 @@ async function runForecastSyncJob(server) {
       )
       return
     }
+    /** This polling loops continue polling every 15 minutes until the file is found and successfully parsed and inserted into the database
+     * Connect → Check → Disconnect → Sleep → Repeat
+     * After sleeping, the script re-establishes a new SFTP connection
+     */
     const pollUntilFound = async () => {
       while (true) {
         logger.info(`[SFTP] Connecting to check for file ${filename}`)
@@ -87,15 +98,6 @@ async function runForecastSyncJob(server) {
             let parsedForecasts
             try {
               parsedForecasts = await parseForecastXml(fileContent)
-              logger.info(
-                `PARSED XML FILE CONTENT :: ${JSON.stringify(parsedForecasts[0], null, 2)}`
-              )
-              logger.info(typeof parsedForecasts[0].updated)
-              logger.info(parsedForecasts[0].updated)
-              logger.info(
-                `[Seeder] Inserted ${parsedForecasts.length} forecast records.`
-              )
-
               const bulkOps = (forecast) => ({
                 replaceOne: {
                   filter: { name: forecast.name },
@@ -113,7 +115,8 @@ async function runForecastSyncJob(server) {
               break
             } catch (err) {
               logger.error(
-                `[XML Parsing Error] Failed to parse forecast XML: ${err.message}`
+                `[XML Parsing Error] Failed to parse forecast XML: ${err.message}`,
+                err
               )
               throw err
             }
@@ -125,7 +128,7 @@ async function runForecastSyncJob(server) {
             await sleep(15 * 60 * 1000)
           }
         } catch (err) {
-          logger.error(`[Error] While checking SFTP: ${err.message}`)
+          logger.error(`[Error] While checking SFTP: ${err.message}`, err)
           logger.error(
             `JSON [Error] While checking SFTP: ${JSON.stringify(err)}`
           )
@@ -136,7 +139,7 @@ async function runForecastSyncJob(server) {
     }
     await pollUntilFound()
   } catch (err) {
-    logger.error(`[Scheduler Error] ${err.message}`)
+    logger.error(`[Scheduler Error] ${err.message}`, err)
     logger.error(`JSON [Scheduler Error] ${JSON.stringify(err)}`)
     throw err
   }
@@ -185,16 +188,15 @@ const seedForecastScheduler = {
     name: 'Seed Forecast Scheduler',
     register: async (server) => {
       // Start the scheduler
-      // await fetchAndSaveForecasts(server)
       logger.info('starting forecasts Scheduler')
       logger.info(
         `Forecasts Scheduler Server time at startup: ${new Date().toString()}`
       )
       logger.info(
-        `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
+        `'Using forecast schedule:', ${config.get('forecastSchedule')}`
       )
       schedule(
-        '40 10 * * *',
+        config.get('forecastSchedule'),
         async () => {
           logger.info('Cron job triggered')
           await runForecastSyncJob(server)

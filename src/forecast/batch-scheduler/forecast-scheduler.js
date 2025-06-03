@@ -18,10 +18,10 @@ const forecastScheduler = {
         `Forecasts Scheduler Server time at startup: ${new Date().toString()}`
       )
       logger.info(
-        `'Using forecast schedule:', ${config.get('seedForecastSchedule')}`
+        `'Using forecast schedule:', ${config.get('forecastSchedule')}`
       )
       schedule(
-        config.get('seedForecastSchedule'),
+        config.get('forecastSchedule'),
         async () => {
           logger.info('Cron job triggered')
           await fetchAndSaveForecasts(server)
