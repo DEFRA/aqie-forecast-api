@@ -9,7 +9,6 @@ async function startServer() {
   try {
     server = await createServer()
     await server.start()
-    server.logger.info(`Server time at startup: ${new Date().toString()}`)
     server.logger.info('Server started successfully')
     server.logger.info(
       `Access your backend on http://localhost:${config.get('port')}`

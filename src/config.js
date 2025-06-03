@@ -26,7 +26,7 @@ const config = convict({
   port: {
     doc: 'The port to bind',
     format: 'port',
-    default: 3005,
+    default: 3001,
     env: 'PORT'
   },
   serviceName: {
@@ -91,17 +91,16 @@ const config = convict({
     }
   },
   forecastSchedule: {
-    doc: 'How often to poll the forecast data (cron format)',
+    doc: 'batch process to feed the forecast data (cron format) into db',
     format: String, // TODO: maybe custom validate this
-    default: '0 05-10 * * *',
-    env: 'FORECAST_SCHEDULE_OPTION_1'
+    default: '00 04 * * *',
+    env: 'FORECAST_SCHEDULE'
   },
-  seedForecastSchedule: {
-    doc: 'initial batch process to feed the forecast data (cron format) into db',
-    format: String, // TODO: maybe custom validate this
-    default: '15 22 * * *',
-    // default: '*/5 * * * *',
-    env: 'SEED_FORECAST_SCHEDULE'
+  forecastRetryInterval: {
+    doc: 'retry interval configuration to continue polling every 15 minutes until the file is found and successfully parsed and inserted into the database',
+    format: 'nat', // TODO: maybe custom validate this
+    default: 900000,
+    env: 'FORECAST_RETRY_INTERVAL'
   },
   sftpPrivateKey: {
     doc: 'SSH Private Key - To Fetch Met Office Data From SFTP DEFRA Server',

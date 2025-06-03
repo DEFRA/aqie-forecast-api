@@ -7,7 +7,7 @@ const logger = createLogger()
 const forecastController = {
   handler: async (request, h) => {
     const forecasts = await getForecastsFromDB(request.db)
-    logger.info(`forecasts:: ${forecasts}`)
+    logger.info(`forecasts length in database:: ${forecasts.length}`)
     const allowOriginUrl = config.get('allowOriginUrl')
     return h
       .response({ message: 'success', forecasts })
