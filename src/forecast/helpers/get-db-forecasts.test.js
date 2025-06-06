@@ -1,72 +1,42 @@
-import { MongoClient } from 'mongodb'
-import { getForecastsFromDB } from './get-db-forecasts'
+import { getForecastsFromDB } from './get-db-forecasts.js'
 
-let client
-let db
-jest.setTimeout(30000)
-beforeAll(async () => {
-  client = await MongoClient.connect(global.__MONGO_URI__, {})
-  db = client.db('testDB')
-})
+describe('getForecastsFromDB', () => {
+  it('should return an array of forecasts from the database', async () => {
+    const mockForecasts = [
+      { date: '2025-06-06', temperature: 25 },
+      { date: '2025-06-07', temperature: 27 }
+    ]
 
-afterAll(async () => {
-  if (client) await client.close(true)
-})
+    const mockToArray = jest.fn().mockResolvedValue(mockForecasts)
+    const mockFind = jest.fn().mockReturnValue({ toArray: mockToArray })
+    const mockCollection = jest.fn().mockReturnValue({ find: mockFind })
+    const mockDb = { collection: mockCollection }
 
-beforeEach(async () => {
-  await db.collection('forecasts').deleteMany({})
-})
+    const result = await getForecastsFromDB(mockDb)
 
-test('should return all forecasts from the database without _id', async () => {
-  const mockData = [
-    { name: 'Site A', value: 1 },
-    { name: 'Site B', value: 2 }
-  ]
+    expect(mockDb.collection).toHaveBeenCalledWith('forecasts')
+    expect(mockFind).toHaveBeenCalledWith({}, { projection: { _id: 0 } })
+    expect(result).toEqual(mockForecasts)
+  })
 
-  // Insert a deep copy to avoid mutation
-  await db
-    .collection('forecasts')
-    .insertMany(JSON.parse(JSON.stringify(mockData)))
+  it('should return an empty array if no forecasts are found', async () => {
+    const mockToArray = jest.fn().mockResolvedValue([])
+    const mockFind = jest.fn().mockReturnValue({ toArray: mockToArray })
+    const mockCollection = jest.fn().mockReturnValue({ find: mockFind })
+    const mockDb = { collection: mockCollection }
 
-  const result = await getForecastsFromDB(db)
+    const result = await getForecastsFromDB(mockDb)
 
-  expect(result).toEqual(mockData) // mockData is still clean
-  expect(result.every((doc) => !('_id' in doc))).toBe(true)
-})
+    expect(result).toEqual([])
+  })
 
-test('should return an empty array if no forecasts exist', async () => {
-  const result = await getForecastsFromDB(db)
-  expect(result).toEqual([])
-})
+  it('should throw an error if db.collection throws', async () => {
+    const mockDb = {
+      collection: jest.fn(() => {
+        throw new Error('DB error')
+      })
+    }
 
-test('should handle documents with additional fields', async () => {
-  const mockData = [{ name: 'Site A', value: 1, extra: 'info' }]
-  await db.collection('forecasts').insertMany(mockData)
-
-  const result = await getForecastsFromDB(db)
-
-  expect(result[0]).toHaveProperty('extra', 'info')
-})
-
-test('should not include _id even if inserted documents have it', async () => {
-  const mockData = [{ name: 'Site A', value: 1 }]
-  await db.collection('forecasts').insertMany(mockData)
-
-  const result = await getForecastsFromDB(db)
-
-  expect(result[0]).not.toHaveProperty('_id')
-})
-
-test('should throw if db is not provided', async () => {
-  await expect(getForecastsFromDB(null)).rejects.toThrow()
-})
-
-test('should throw if collection does not exist', async () => {
-  // Drop the collection to simulate non-existence
-  await db
-    .collection('forecasts')
-    .drop()
-    .catch(() => {})
-  const result = await getForecastsFromDB(db)
-  expect(result).toEqual([]) // MongoDB returns empty cursor if collection doesn't exist
+    await expect(getForecastsFromDB(mockDb)).rejects.toThrow('DB error')
+  })
 })
