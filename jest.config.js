@@ -25,8 +25,5 @@ export default {
       '@defra/hapi-tracing', // Supports ESM only
       'node-fetch' // Supports ESM only
     ].join('|')}/)`
-  ],
-  detectOpenHandles: true,
-  forceExit: true,
-  maxWorkers: 1
+  ]
 }

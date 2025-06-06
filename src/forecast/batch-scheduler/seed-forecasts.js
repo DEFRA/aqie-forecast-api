@@ -5,6 +5,7 @@ import { createLogger } from '../../common/helpers/logging/logger.js'
 import { runForecastSyncJob } from './runForecastSyncJob.js'
 
 const logger = createLogger()
+let cronJob // store the job reference
 
 // Schedule it to run daily at 5:00 AM
 const seedForecastScheduler = {
@@ -14,7 +15,7 @@ const seedForecastScheduler = {
       // Start the scheduler
       try {
         logger.info('starting forecasts Scheduler')
-        schedule(
+        cronJob = schedule(
           config.get('forecastSchedule'),
           async () => {
             logger.info('Cron job triggered')
@@ -25,8 +26,16 @@ const seedForecastScheduler = {
           // }
         )
         logger.info('Inital forecasts Scheduler done! Running at 5am')
+
+        // Stop the cron job when the server stops
+        server.ext('onPostStop', () => {
+          if (cronJob) {
+            logger.info('Stopping forecast scheduler')
+            cronJob.stop()
+          }
+        })
       } catch (error) {
-        logger.error(`'Forecast sync job failed:', ${err}`)
+        logger.error(`'Forecast sync job failed:', ${error}`)
       }
     }
   }
