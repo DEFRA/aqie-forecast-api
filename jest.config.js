@@ -28,5 +28,5 @@ export default {
   ],
   detectOpenHandles: true,
   forceExit: true,
-  maxWorkers: 1,
+  maxWorkers: 1
 }
