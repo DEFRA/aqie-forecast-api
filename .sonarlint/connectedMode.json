@@ -1,4 +1,5 @@
 {
   "sonarCloudOrganization": "defra",
-  "projectKey": "DEFRA_aqie-forecast-api"
+  "projectKey": "DEFRA_aqie-forecast-api",
+  "region": "EU"
 }
