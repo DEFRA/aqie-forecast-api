@@ -1,7 +1,8 @@
+/* eslint-disable */
+jest.setTimeout(30000) // 30 seconds
 import { runForecastSyncJob } from './runForecastSyncJob.js'
 import { schedule } from 'node-cron'
 import { seedForecastScheduler } from './seed-forecasts.js'
-jest.setTimeout(30000) // 30 seconds
 
 jest.mock('../../common/helpers/logging/logger.js', () => ({
   createLogger: jest.fn(() => mockLogger)
@@ -104,7 +105,7 @@ describe('seedForecastScheduler plugin', () => {
 
   it('should wrap and re-throw non-Error values during scheduler setup', async () => {
     schedule.mockImplementationOnce(() => {
-      throw new Error('non-error setup failure')
+      throw 'non-error setup failure'
     })
 
     await expect(
