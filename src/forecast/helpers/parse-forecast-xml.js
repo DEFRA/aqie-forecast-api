@@ -1,6 +1,7 @@
 import xml2js from 'xml2js'
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc.js'
+import { FIVE } from './constant.js'
 dayjs.extend(utc)
 
 export const parseForecastXml = async (xmlString) => {
@@ -9,20 +10,23 @@ export const parseForecastXml = async (xmlString) => {
   })
 
   const sites = parsed.DEFRAAirQuality.site
-  if (!sites) return []
+  if (!sites) {
+    return []
+  }
   const siteArray = Array.isArray(sites) ? sites : [sites]
 
   return siteArray
     .map((site) => {
-      if (!site?.$) return null
-
+      if (!site?.$) {
+        return null
+      }
       const baseDate = dayjs.utc(
         `${site.$.yr}-${site.$.mon}-${site.$.dayn}T${site.$.hr.slice(0, 2)}:00:00`
       )
 
       const forecastDays = Array.isArray(site.day) ? site.day : [site.day]
 
-      const forecast = forecastDays.slice(0, 5).map((d, index) => ({
+      const forecast = forecastDays.slice(0, FIVE).map((d, index) => ({
         day: baseDate.add(index, 'day').format('ddd'),
         value: parseInt(d.$.aq)
       }))

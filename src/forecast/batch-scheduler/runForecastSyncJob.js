@@ -76,9 +76,9 @@ async function runForecastSyncJob(server) {
       sleep
     })
   } catch (err) {
-    logger.error(`[Scheduler Error] ${err.message}`, err)
-    logger.error(`JSON [Scheduler Error] ${JSON.stringify(err)}`)
-    throw err
+    logger.error(`[Forecast Scheduler Sync Job Error] ${err.message}`, err)
+    // Optional: alerting or fallback logic here
+    throw err instanceof Error ? err : new Error(String(err))
   }
 }
 
