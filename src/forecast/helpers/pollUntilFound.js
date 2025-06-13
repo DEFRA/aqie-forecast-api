@@ -2,7 +2,7 @@
  * Connect → Check → Disconnect → Sleep → Repeat
  * After sleeping, the script re-establishes a new SFTP connection
  */
-
+import { config } from '../../config.js'
 export const pollUntilFound = async ({
   filename,
   logger,
@@ -40,20 +40,20 @@ export const pollUntilFound = async ({
           logger.info(
             `[DB] Forecasts inserted successfully for ${parsedForecasts.length} locations.`
           )
-          break
+          break // Exit loop on success
         } catch (err) {
           logger.error(`[XML Parsing Error] ${err.message}`, err)
-          throw err
+          throw err instanceof Error ? err : new Error(String(err))
         }
       } else {
         logger.info(`[SFTP] File ${filename} not found. Retrying in 15 mins.`)
         await sftp.end()
-        await sleep(15 * 60 * 1000)
+        await sleep(config.get('forecastRetryInterval'))
       }
     } catch (err) {
       logger.error(`[Error] While checking SFTP: ${err.message}`, err)
       logger.info('[Retry] Waiting 15 mins before next attempt.')
-      await sleep(15 * 60 * 1000)
+      await sleep(config.get('forecastRetryInterval'))
     }
   }
 }

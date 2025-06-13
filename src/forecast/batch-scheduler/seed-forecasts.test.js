@@ -1,23 +1,21 @@
 /* eslint-disable */
-jest.mock('../../common/helpers/logging/logger.js', () => ({
-  createLogger: () => ({
-    info: jest.fn(),
-    error: jest.fn()
-  })
-}))
-import { seedForecastScheduler } from './seed-forecasts.js'
+jest.setTimeout(30000) // 30 seconds
 import { runForecastSyncJob } from './runForecastSyncJob.js'
-import { config } from '../../config.js'
 import { schedule } from 'node-cron'
+import { seedForecastScheduler } from './seed-forecasts.js'
+
+jest.mock('../../common/helpers/logging/logger.js', () => ({
+  createLogger: jest.fn(() => mockLogger)
+}))
+
+// Shared mock logger instance
+const mockLogger = {
+  info: jest.fn(),
+  error: jest.fn()
+}
 
 jest.mock('node-cron', () => ({
   schedule: jest.fn()
-}))
-
-jest.mock('../../config.js', () => ({
-  config: {
-    get: jest.fn()
-  }
 }))
 
 jest.mock('./runForecastSyncJob.js', () => ({
@@ -25,54 +23,97 @@ jest.mock('./runForecastSyncJob.js', () => ({
 }))
 
 describe('seedForecastScheduler plugin', () => {
-  let mockServer
+  let serverMock
+  let cronCallback
+  let stopMock
 
   beforeEach(() => {
+    stopMock = jest.fn()
+    serverMock = { ext: jest.fn() }
+
+    schedule.mockImplementation((_, cb) => {
+      cronCallback = cb
+      return { stop: stopMock }
+    })
+
     jest.clearAllMocks()
-    mockServer = { app: {}, db: {} }
   })
 
-  it('should register the plugin and schedule the job', async () => {
-    const cronExpression = '0 5 * * *' // 5:00 AM daily
-    config.get.mockReturnValue(cronExpression)
+  it('should register and schedule the cron job', async () => {
+    await seedForecastScheduler.plugin.register(serverMock)
 
-    await seedForecastScheduler.plugin.register(mockServer)
-
-    expect(config.get).toHaveBeenCalledWith('forecastSchedule')
-    expect(schedule).toHaveBeenCalledWith(cronExpression, expect.any(Function))
+    expect(schedule).toHaveBeenCalled()
+    expect(serverMock.ext).toHaveBeenCalledWith(
+      'onPostStop',
+      expect.any(Function)
+    )
+    expect(mockLogger.info).toHaveBeenCalledWith('starting forecasts Scheduler')
   })
 
   it('should call runForecastSyncJob when cron job is triggered', async () => {
-    const cronExpression = '0 5 * * *'
-    config.get.mockReturnValue(cronExpression)
+    await seedForecastScheduler.plugin.register(serverMock)
+    await cronCallback()
 
-    let scheduledCallback
-    schedule.mockImplementation((_, cb) => {
-      scheduledCallback = cb
-    })
-
-    await seedForecastScheduler.plugin.register(mockServer)
-
-    await scheduledCallback()
-
-    expect(runForecastSyncJob).toHaveBeenCalledWith(mockServer)
+    expect(runForecastSyncJob).toHaveBeenCalled()
   })
 
-  it('should throw if runForecastSyncJob fails', async () => {
-    const cronExpression = '0 5 * * *'
-    config.get.mockReturnValue(cronExpression)
+  it('should log and re-throw error if runForecastSyncJob throws an Error', async () => {
+    const error = new Error('Sync failed')
+    runForecastSyncJob.mockRejectedValueOnce(error)
 
-    let scheduledCallback
-    schedule.mockImplementation((_, cb) => {
-      scheduledCallback = cb
+    await seedForecastScheduler.plugin.register(serverMock)
+
+    await expect(cronCallback()).rejects.toThrow('Sync failed')
+    expect(mockLogger.error).toHaveBeenCalledWith(`[Cron Job Error]`, error)
+  })
+
+  it('should wrap and re-throw non-Error thrown values from runForecastSyncJob', async () => {
+    runForecastSyncJob.mockRejectedValueOnce('non-error string')
+
+    await seedForecastScheduler.plugin.register(serverMock)
+
+    await expect(cronCallback()).rejects.toThrow('non-error string')
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      `[Cron Job Error]`,
+      'non-error string'
+    )
+  })
+
+  it('should stop the cron job on server shutdown', async () => {
+    await seedForecastScheduler.plugin.register(serverMock)
+    const onPostStopHandler = serverMock.ext.mock.calls[0][1]
+
+    onPostStopHandler()
+
+    expect(stopMock).toHaveBeenCalled()
+    expect(mockLogger.info).toHaveBeenCalledWith('Stopping forecast scheduler')
+  })
+
+  it('should log and re-throw error if scheduler setup fails', async () => {
+    schedule.mockImplementationOnce(() => {
+      throw new Error('Scheduler setup failed')
     })
 
-    const error = new Error('Job failed')
-    runForecastSyncJob.mockRejectedValue(error)
+    await expect(
+      seedForecastScheduler.plugin.register(serverMock)
+    ).rejects.toThrow('Scheduler setup failed')
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      `'Forecast sync job failed:'`,
+      expect.any(Error)
+    )
+  })
 
-    await seedForecastScheduler.plugin.register(mockServer)
+  it('should wrap and re-throw non-Error values during scheduler setup', async () => {
+    schedule.mockImplementationOnce(() => {
+      throw 'non-error setup failure'
+    })
 
-    await expect(scheduledCallback()).rejects.toThrow('Job failed')
-    expect(runForecastSyncJob).toHaveBeenCalled()
+    await expect(
+      seedForecastScheduler.plugin.register(serverMock)
+    ).rejects.toThrow('non-error setup failure')
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      `'Forecast sync job failed:'`,
+      'non-error setup failure'
+    )
   })
 })

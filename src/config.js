@@ -98,13 +98,13 @@ const config = convict({
   },
   forecastRetryInterval: {
     doc: 'retry interval configuration to continue polling every 15 minutes until the file is found and successfully parsed and inserted into the database',
-    format: 'nat', // TODO: maybe custom validate this
+    format: 'nat',
     default: 900000,
     env: 'FORECAST_RETRY_INTERVAL'
   },
   sftpPrivateKey: {
     doc: 'SSH Private Key - To Fetch Met Office Data From SFTP DEFRA Server',
-    format: String, // TODO: maybe custom validate this
+    format: String,
     default: '',
     env: 'SSH_PRIVATE_KEY'
   },
