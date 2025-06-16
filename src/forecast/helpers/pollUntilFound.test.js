@@ -139,4 +139,65 @@ describe('pollUntilFound', () => {
       expect.any(Error)
     )
   })
+
+  test('should handle XML parsing error and log it', async () => {
+    mockSftp.list.mockResolvedValue([
+      { name: 'MetOfficeDefraAQSites_20250604.xml' }
+    ])
+    mockSftp.get.mockResolvedValue('<invalid-xml>')
+
+    // Force parseForecastXml to throw
+    mockParseForecastXml.mockRejectedValueOnce(new Error('Invalid XML'))
+
+    // Prevent infinite loop
+    try {
+      await pollUntilFound({
+        filename: 'MetOfficeDefraAQSites_20250604.xml',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep,
+        maxAttempts: 1 // limit loop for testing
+      })
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error)
+      expect(err.message).toBe('Invalid XML')
+    }
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      '[XML Parsing Error] Invalid XML',
+      expect.any(Error)
+    )
+  })
+
+  test('should wrap non-Error thrown by parseForecastXml', async () => {
+    mockSftp.list.mockResolvedValue([
+      { name: 'MetOfficeDefraAQSites_20250604.xml' }
+    ])
+    mockSftp.get.mockResolvedValue('<invalid-xml>')
+
+    // Simulate non-Error thrown
+    mockParseForecastXml.mockRejectedValueOnce('non-error string')
+
+    try {
+      await pollUntilFound({
+        filename: 'MetOfficeDefraAQSites_20250604.xml',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep,
+        maxAttempts: 1
+      })
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error)
+      expect(err.message).toBe('non-error string')
+    }
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      '[XML Parsing Error] undefined',
+      'non-error string'
+    )
+  })
 })

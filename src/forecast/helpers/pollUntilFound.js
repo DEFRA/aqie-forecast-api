@@ -9,9 +9,12 @@ export const pollUntilFound = async ({
   forecastsCol,
   parseForecastXml,
   connectSftp,
-  sleep
+  sleep,
+  maxAttempts = Infinity
 }) => {
-  while (true) {
+  let attempts = 0
+  while (attempts < maxAttempts) {
+    attempts++
     logger.info(`[SFTP] Connecting to check for file ${filename}`)
     try {
       const { sftp } = await connectSftp()

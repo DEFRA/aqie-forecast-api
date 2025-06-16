@@ -12,7 +12,7 @@ import {
 import SFTPClient from 'ssh2-sftp-client'
 import fs from 'fs'
 import http from 'http'
-import https from 'https'
+import { PROXY_PORT } from './constant.js'
 import { config } from '../../config.js'
 
 jest.mock('ssh2-sftp-client')
@@ -160,5 +160,86 @@ describe('connectLocalSftp', () => {
     mockSftpInstance.connect.mockRejectedValueOnce(new Error('SFTP error'))
 
     await expect(connectLocalSftp()).rejects.toThrow('SFTP error')
+  })
+  it('should wrap non-Error thrown in connectLocalSftp', async () => {
+    fs.readFileSync.mockReturnValue('PRIVATE_KEY')
+    mockSftpInstance.connect.mockRejectedValueOnce('non-error string')
+
+    await expect(connectLocalSftp()).rejects.toThrow('non-error string')
+  })
+
+  it('should wrap non-Error rejected in connectSftpThroughProxy', async () => {
+    const mockSocket = {} //Define mockSocket locally
+
+    config.get
+      .mockReturnValueOnce('http://proxy.example.com:8080')
+      .mockReturnValueOnce(Buffer.from('PRIVATE_KEY').toString('base64'))
+
+    mockSftpInstance.connect.mockRejectedValueOnce('not an Error instance')
+
+    const req = {
+      on: jest.fn((event, cb) => {
+        if (event === 'connect') {
+          cb({ statusCode: 200 }, mockSocket)
+        }
+        return req
+      }),
+      end: jest.fn()
+    }
+
+    http.request.mockReturnValue(req)
+
+    await expect(connectSftpThroughProxy()).rejects.toThrow(
+      'not an Error instance'
+    )
+  })
+
+  it('should use default PROXY_PORT if proxy URL has no port', async () => {
+    const mockSocket = {}
+
+    // Simulate proxy URL without port
+    config.get
+      .mockReturnValueOnce('http://proxy.example.com') // no port
+      .mockReturnValueOnce(Buffer.from('PRIVATE_KEY').toString('base64'))
+
+    const req = {
+      on: jest.fn((event, cb) => {
+        if (event === 'connect') {
+          cb({ statusCode: 200 }, mockSocket)
+        }
+        return req
+      }),
+      end: jest.fn()
+    }
+
+    http.request.mockReturnValue(req)
+
+    await connectSftpThroughProxy()
+
+    expect(http.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        port: PROXY_PORT
+      })
+    )
+  })
+
+  it('should wrap non-Error in req.on("error") handler', async () => {
+    config.get
+      .mockReturnValueOnce('http://proxy.example.com:8080')
+      .mockReturnValueOnce(Buffer.from('PRIVATE_KEY').toString('base64'))
+
+    const req = {
+      on: jest.fn((event, cb) => {
+        if (event === 'error') {
+          cb('non-error string')
+        }
+        return req
+      }),
+      end: jest.fn()
+    }
+
+    http.request.mockReturnValue(req)
+
+    await expect(connectSftpThroughProxy()).rejects.toThrow('non-error string')
   })
 })
