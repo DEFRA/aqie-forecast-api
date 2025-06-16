@@ -5,7 +5,6 @@ import { Buffer } from 'buffer'
 import fs from 'fs'
 import { URL } from 'url'
 import http from 'http'
-import https from 'https'
 import { PROXY_PORT, SFTP_HOST, SFTP_PORT, SUCCESS_CODE } from './constant.js'
 const logger = createLogger()
 
@@ -33,12 +32,9 @@ async function connectSftpThroughProxy() {
   const privateKeyBase64 = config.get('sftpPrivateKey')
   const privateKey = Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
 
-  const proxyModule = proxyUrl.protocol.startsWith('https') ? https : http
-  logger.info(`proxyModule::: ${JSON.stringify(proxyModule)}`)
-
   return new Promise((resolve, reject) => {
     logger.info(`inside Promise`)
-    const req = proxyModule.request(proxyOptions)
+    const req = http.request(proxyOptions)
     logger.info(`Before REQUEST:: ${JSON.stringify(req)}`)
     req.path = `${SFTP_HOST}:${SFTP_PORT}`
     logger.info(`After REQUEST:: ${JSON.stringify(req)}`)

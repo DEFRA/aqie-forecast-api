@@ -114,4 +114,18 @@ describe('runForecastSyncJob', () => {
 
     await expect(runForecastSyncJob(mockServer)).rejects.toThrow('DB failure')
   })
+
+  it('should wrap non-Error thrown during polling', async () => {
+    mockServer.db.listCollections.mockReturnValue({
+      toArray: jest.fn().mockResolvedValue([{ name: 'forecasts' }])
+    })
+    mockCollection.countDocuments.mockResolvedValue(0)
+
+    // Simulate a non-Error rejection
+    pollUntilFound.mockRejectedValueOnce('non-error string')
+
+    await expect(runForecastSyncJob(mockServer)).rejects.toThrow(
+      'non-error string'
+    )
+  })
 })
