@@ -24,6 +24,14 @@ const COLLECTION_NAME = 'forecasts'
 
 async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
+  const lock = await server.locker.lock(COLLECTION_NAME)
+  logger.info(`:::::::LOCKED:::::`)
+  if (!lock) {
+    if (logger) {
+      logger.error(`Failed to acquire lock for resource - forecasts`)
+    }
+    return null
+  }
   const filename = getExpectedFileName()
   logger.info(`Today's Forecast Filename::: ${filename}`)
   try {
@@ -79,6 +87,9 @@ async function runForecastSyncJob(server) {
     logger.error(`[Forecast Scheduler Sync Job Error] ${err.message}`, err)
     // Optional: alerting or fallback logic here
     throw err instanceof Error ? err : new Error(String(err))
+  } finally {
+    logger.info(`::::::::::UNLOCKED::::::::`)
+    await lock.free()
   }
 }
 

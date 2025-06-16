@@ -38,10 +38,19 @@ describe('runForecastSyncJob', () => {
         listCollections: jest.fn(),
         createCollection: jest.fn(),
         collection: jest.fn().mockResolvedValue(mockCollection)
+      },
+      locker: {
+        lock: jest.fn().mockResolvedValue({
+          free: jest.fn()
+        })
       }
     }
 
     getExpectedFileName.mockReturnValue('forecast.xml')
+  })
+
+  afterEach(() => {
+    jest.resetAllMocks()
   })
 
   it('should create collection and start polling if forecast does not exist', async () => {
@@ -126,6 +135,78 @@ describe('runForecastSyncJob', () => {
 
     await expect(runForecastSyncJob(mockServer)).rejects.toThrow(
       'non-error string'
+    )
+  })
+
+  it('should return early if lock is not acquired', async () => {
+    const mockLock = null
+    mockServer.locker = {
+      lock: jest.fn().mockResolvedValue(mockLock)
+    }
+
+    await runForecastSyncJob(mockServer)
+
+    expect(mockServer.locker.lock).toHaveBeenCalledWith('forecasts')
+    expect(mockServer.db.listCollections).not.toHaveBeenCalled()
+  })
+
+  it('should release lock after successful execution', async () => {
+    const mockFree = jest.fn()
+    const mockLock = { free: mockFree }
+
+    mockServer.locker = {
+      lock: jest.fn().mockResolvedValue(mockLock)
+    }
+
+    mockServer.db.listCollections.mockReturnValue({
+      toArray: jest.fn().mockResolvedValue([])
+    })
+    mockCollection.countDocuments.mockResolvedValue(0)
+
+    pollUntilFound.mockResolvedValue()
+
+    await runForecastSyncJob(mockServer)
+
+    expect(mockFree).toHaveBeenCalled()
+  })
+
+  it('should release lock even if an error is thrown', async () => {
+    const mockFree = jest.fn()
+    const mockLock = { free: mockFree }
+
+    mockServer.locker = {
+      lock: jest.fn().mockResolvedValue(mockLock)
+    }
+
+    mockServer.db.listCollections.mockImplementation(() => {
+      throw new Error('DB failure')
+    })
+
+    await expect(runForecastSyncJob(mockServer)).rejects.toThrow('DB failure')
+    expect(mockFree).toHaveBeenCalled()
+  })
+
+  it('should log an error if lock is not acquired', async () => {
+    const mockError = jest.fn()
+    const mockLogger = {
+      info: jest.fn(),
+      error: mockError
+    }
+    jest.mock('../../common/helpers/logging/logger.js', () => ({
+      createLogger: () => mockLogger
+    }))
+
+    // Re-require the module to apply the new mock
+    const { runForecastSyncJob } = await import('./runForecastSyncJob.js')
+
+    mockServer.locker = {
+      lock: jest.fn().mockResolvedValue(null)
+    }
+
+    await runForecastSyncJob(mockServer)
+
+    expect(mockError).toHaveBeenCalledWith(
+      'Failed to acquire lock for resource - forecasts'
     )
   })
 })
