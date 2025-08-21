@@ -3,18 +3,38 @@
  * After sleeping, the script re-establishes a new SFTP connection
  */
 import { config } from '../../config.js'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc.js'
+
+dayjs.extend(utc)
+
 export const pollUntilFound = async ({
   filename,
   logger,
   forecastsCol,
   parseForecastXml,
   connectSftp,
-  sleep,
-  maxAttempts = Infinity
+  sleep
 }) => {
-  let attempts = 0
-  while (attempts < maxAttempts) {
-    attempts++
+  const today = dayjs().utc().startOf('day')
+  const cutoffTime = today.endOf('day') // 11:59 PM UTC
+  const alertTime = today.add(10, 'hour') // 10:00 AM UTC
+  let alertSent = false
+
+  while (dayjs().utc().isBefore(cutoffTime)) {
+    const now = dayjs().utc()
+
+    // Send alert at 10:00 AM if file still not found
+    if (!alertSent && now.isAfter(alertTime)) {
+      logger.error(
+        `[Alert] Forecast file not uploaded to MetOffice SFTP server for ${today.format('YYYY-MM-DD')}`
+      )
+      logger.warn(
+        `[Alert] Forecast file not uploaded to MetOffice SFTP server for ${today.format('YYYY-MM-DD')}`
+      )
+      alertSent = true
+    }
+
     logger.info(`[SFTP] Connecting to check for file ${filename}`)
     try {
       const { sftp } = await connectSftp()
@@ -45,7 +65,11 @@ export const pollUntilFound = async ({
           )
           break // Exit loop on success
         } catch (err) {
-          logger.error(`[XML Parsing Error] ${err.message}`, err)
+          logger.error(
+            `[XML Parsing Error] File found but could not be parsed: ${err.message}`,
+            err
+          )
+          // logger.warn(`[Alert] Forecast file for ${dayjs().utc().format('YYYY-MM-DD')} is invalid or corrupted.`)
           throw err instanceof Error ? err : new Error(String(err))
         }
       } else {
@@ -59,4 +83,7 @@ export const pollUntilFound = async ({
       await sleep(config.get('forecastRetryInterval'))
     }
   }
+  logger.info(
+    `[Polling Ended] Forecast file not found by cutoff time (${cutoffTime.format()}).`
+  )
 }

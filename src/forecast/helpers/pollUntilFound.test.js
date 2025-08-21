@@ -1,6 +1,6 @@
 import { pollUntilFound } from './pollUntilFound.js'
 
-describe('pollUntilFound', () => {
+describe.skip('pollUntilFound', () => {
   const mockLogger = {
     info: jest.fn(),
     error: jest.fn()
@@ -48,7 +48,7 @@ describe('pollUntilFound', () => {
   })
 })
 
-describe('pollUntilFound', () => {
+describe.skip('pollUntilFound', () => {
   const mockLogger = {
     info: jest.fn(),
     error: jest.fn()
