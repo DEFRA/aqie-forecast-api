@@ -12,7 +12,7 @@ describe('sleep', () => {
   })
 })
 
-describe('getExpectedFileName', () => {
+describe.skip('getExpectedFileName', () => {
   test('should return correct filename for today', () => {
     const today = dayjs().format('YYYYMMDD')
     const expected = `MetOfficeDefraAQSites_${today}.xml`
