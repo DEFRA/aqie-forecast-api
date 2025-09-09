@@ -1,6 +1,6 @@
 import { pollUntilFound } from './pollUntilFound.js'
 
-describe.skip('pollUntilFound', () => {
+describe('pollUntilFound', () => {
   const mockLogger = {
     info: jest.fn(),
     error: jest.fn()
@@ -48,7 +48,7 @@ describe.skip('pollUntilFound', () => {
   })
 })
 
-describe.skip('pollUntilFound', () => {
+describe('pollUntilFound', () => {
   const mockLogger = {
     info: jest.fn(),
     error: jest.fn()
@@ -166,7 +166,9 @@ describe.skip('pollUntilFound', () => {
     }
 
     expect(mockLogger.error).toHaveBeenCalledWith(
-      '[XML Parsing Error] Invalid XML',
+      expect.stringContaining(
+        '[XML Parsing Error] File found but could not be parsed: Invalid XML'
+      ),
       expect.any(Error)
     )
   })
@@ -196,8 +198,82 @@ describe.skip('pollUntilFound', () => {
     }
 
     expect(mockLogger.error).toHaveBeenCalledWith(
-      '[XML Parsing Error] undefined',
+      expect.stringContaining(
+        '[XML Parsing Error] File found but could not be parsed:'
+      ),
       'non-error string'
     )
+  })
+
+  test('should handle error thrown after file not found and retry', async () => {
+    mockSftp.list.mockResolvedValue([]) // file not found
+    mockSftp.end.mockImplementation(() => {
+      throw new Error('end error')
+    })
+    mockSleep.mockImplementationOnce(() => {
+      throw new Error('stop')
+    }) // break loop
+
+    try {
+      await pollUntilFound({
+        filename: 'MetOfficeDefraAQSites_20250604.xml',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+    } catch {}
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('end error'),
+      expect.any(Error)
+    )
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      expect.stringContaining('[Retry] Waiting')
+    )
+  })
+
+  test('should log both 10:00 and 15:00 alerts if file not found', async () => {
+    mockSftp.list.mockResolvedValue([])
+
+    let callCount = 0
+    mockSleep.mockImplementation(async () => {
+      callCount++
+      if (callCount === 1) {
+        // Simulate time just after 10:00
+        jest.spyOn(Date, 'now').mockImplementation(() => {
+          const now = new Date()
+          now.setHours(10, 1, 0, 0)
+          return now.getTime()
+        })
+      } else if (callCount === 2) {
+        // Simulate time just after 15:00
+        jest.spyOn(Date, 'now').mockImplementation(() => {
+          const now = new Date()
+          now.setHours(15, 1, 0, 0)
+          return now.getTime()
+        })
+      } else {
+        throw new Error('stop')
+      }
+    })
+
+    try {
+      await pollUntilFound({
+        filename: 'MetOfficeDefraAQSites_20250604.xml',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+    } catch {}
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[Alert] Forecast file not uploaded to MetOffice SFTP'
+      )
+    )
+    jest.spyOn(Date, 'now').mockRestore()
   })
 })

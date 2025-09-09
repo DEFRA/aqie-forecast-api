@@ -3,3 +3,7 @@ export const SFTP_PORT = 22
 export const SFTP_HOST = 'sftp22.sftp-defra-gov-uk.quatrix.it'
 export const FIVE = 5
 export const SUCCESS_CODE = 200
+export const FIFTEEN = 15
+export const TEN = 10
+export const COLLECTION_NAME = 'forecasts'
+export const RETRY_MINUTES = 60000
