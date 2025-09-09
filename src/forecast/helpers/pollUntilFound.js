@@ -7,6 +7,7 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc.js'
 import tz from 'dayjs/plugin/timezone.js'
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter.js'
+import { FIFTEEN, TEN, RETRY_MINUTES } from '../helpers/constant.js'
 
 dayjs.extend(utc)
 dayjs.extend(tz)
@@ -25,8 +26,8 @@ export const pollUntilFound = async ({
   const today = dayjs().tz(TIMEZONE).startOf('day') // UK local midnight
   const cutoffTime = today.add(23, 'hour').add(30, 'minute') // 11:30pm UK time
   const alertTimes = [
-    today.add(10, 'hour').add(0, 'minute'), // 10:00 UK time
-    today.add(15, 'hour').add(0, 'minute') // 15:00 UK time
+    today.add(TEN, 'hour').add(0, 'minute'), // 10:00 UK time
+    today.add(FIFTEEN, 'hour').add(0, 'minute') // 15:00 UK time
   ]
   const alertsSent = new Set() // Track which alerts are already sent
 
@@ -103,7 +104,7 @@ export const pollUntilFound = async ({
     } catch (err) {
       logger.error(`[Error] While checking SFTP: ${err.message}`, err)
       logger.info(
-        `[Retry] Waiting ${config.get('forecastRetryInterval') / 60000} mins before next attempt.`
+        `[Retry] Waiting ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins before next attempt.`
       )
       await sleep(config.get('forecastRetryInterval'))
     }

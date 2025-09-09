@@ -12,6 +12,7 @@ import { createLogger } from '../../common/helpers/logging/logger.js'
 import { getExpectedFileName, sleep } from '../helpers/utility.js'
 import { pollUntilFound } from '../helpers/pollUntilFound.js'
 import { parseForecastXml } from '../helpers/parse-forecast-xml.js'
+import { COLLECTION_NAME } from '../helpers/constant.js'
 import {
   connectSftpThroughProxy,
   connectLocalSftp
@@ -19,8 +20,6 @@ import {
 
 const logger = createLogger()
 dayjs.extend(utc)
-
-const COLLECTION_NAME = 'forecasts'
 
 async function runForecastSyncJob(server) {
   logger.info('[Seeder] Running MetOffice forecast seed script...')
