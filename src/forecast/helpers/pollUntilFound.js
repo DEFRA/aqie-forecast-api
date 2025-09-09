@@ -7,7 +7,13 @@ import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc.js'
 import tz from 'dayjs/plugin/timezone.js'
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter.js'
-import { FIFTEEN, TEN, RETRY_MINUTES } from '../helpers/constant.js'
+import {
+  FIFTEEN,
+  TEN,
+  RETRY_MINUTES,
+  THIRTY,
+  TWENTY_THREE
+} from '../helpers/constant.js'
 
 dayjs.extend(utc)
 dayjs.extend(tz)
@@ -24,7 +30,7 @@ export const pollUntilFound = async ({
   sleep
 }) => {
   const today = dayjs().tz(TIMEZONE).startOf('day') // UK local midnight
-  const cutoffTime = today.add(23, 'hour').add(30, 'minute') // 11:30pm UK time
+  const cutoffTime = today.add(TWENTY_THREE, 'hour').add(THIRTY, 'minute') // 11:30pm UK time
   const alertTimes = [
     today.add(TEN, 'hour').add(0, 'minute'), // 10:00 UK time
     today.add(FIFTEEN, 'hour').add(0, 'minute') // 15:00 UK time
@@ -96,7 +102,7 @@ export const pollUntilFound = async ({
         }
       } else {
         logger.info(
-          `[SFTP] File ${filename} not found. Retrying in ${config.get('forecastRetryInterval') / 60000} mins.`
+          `[SFTP] File ${filename} not found. Retrying in ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins.`
         )
         await sftp.end()
         await sleep(config.get('forecastRetryInterval'))
