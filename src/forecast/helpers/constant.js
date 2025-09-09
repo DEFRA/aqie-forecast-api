@@ -7,3 +7,5 @@ export const FIFTEEN = 15
 export const TEN = 10
 export const COLLECTION_NAME = 'forecasts'
 export const RETRY_MINUTES = 60000
+export const THIRTY = 30
+export const TWENTY_FOUR = 23

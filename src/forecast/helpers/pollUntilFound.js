@@ -96,7 +96,7 @@ export const pollUntilFound = async ({
         }
       } else {
         logger.info(
-          `[SFTP] File ${filename} not found. Retrying in ${config.get('forecastRetryInterval') / 60000} mins.`
+          `[SFTP] File ${filename} not found. Retrying in ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins.`
         )
         await sftp.end()
         await sleep(config.get('forecastRetryInterval'))
