@@ -6,6 +6,7 @@ export const SUCCESS_CODE = 200
 export const FIFTEEN = 15
 export const TEN = 10
 export const COLLECTION_NAME = 'forecasts'
+export const SUMMARY_COLLECTION_NAME = 'forecast-summary'
 export const RETRY_MINUTES = 60000
 export const THIRTY = 30
 export const TWENTY_THREE = 23
