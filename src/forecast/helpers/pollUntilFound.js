@@ -1,14 +1,13 @@
-
-/** 
- * This polling loop continues polling every 15 minutes until both forecast and summary files 
+/**
+ * This polling loop continues polling every 15 minutes until both forecast and summary files
  * are found, parsed, and inserted into the database.
- * 
+ *
  * The process is:
  *   1. Connect to SFTP
  *   2. Check for both files
  *   3. Disconnect from SFTP
  *   4. Sleep if not found, then repeat
- * 
+ *
  * Alerts are logged at 10:00 and 15:00 UK time if files are still missing.
  * Polling stops at 11:30pm UK time.
  */
@@ -32,16 +31,16 @@ dayjs.extend(isSameOrAfter)
 const TIMEZONE = 'Europe/London'
 
 export const pollUntilFound = async ({
-  type = 'both', 
-  filename, 
-  summaryFilename, 
-  forecastsCol, 
-  parseForecastXml, 
-  summaryCol, 
-  parseForecastSummaryTxt, 
-  logger, 
-  connectSftp, 
-  sleep 
+  type = 'both',
+  filename,
+  summaryFilename,
+  forecastsCol,
+  parseForecastXml,
+  summaryCol,
+  parseForecastSummaryTxt,
+  logger,
+  connectSftp,
+  sleep
 }) => {
   // Calculate polling window and alert times
   const today = dayjs().tz(TIMEZONE).startOf('day') // UK local midnight
@@ -83,23 +82,28 @@ export const pollUntilFound = async ({
       }
     }
 
-    logger.info(`[SFTP] Connecting to check for files: ${filename} and ${summaryFilename}`)
+    logger.info(
+      `[SFTP] Connecting to check for files: ${filename} and ${summaryFilename}`
+    )
     try {
       // Connect to SFTP and list files in the remote directory
       const { sftp } = await connectSftp()
       const remotePath = `/Incoming Shares/AQIE/MetOffice/`
       const files = await sftp.list(remotePath)
-      
 
       // --- Forecast file check and processing ---
       if (!forecastDone && filename) {
         const fileFound = files.find(
           (file) => file.name.trim() === filename.trim()
         )
-        logger.info(`[SFTP] Forecast File Match ${JSON.stringify(fileFound)} found.`)
+        logger.info(
+          `[SFTP] Forecast File Match ${JSON.stringify(fileFound)} found.`
+        )
 
         if (fileFound) {
-          logger.info(`[SFTP] Forecast file ${filename} found. Fetching content...`)
+          logger.info(
+            `[SFTP] Forecast file ${filename} found. Fetching content...`
+          )
           const fileContent = await sftp.get(`${remotePath}${filename}`)
           try {
             // Parse and upsert forecast data
@@ -124,33 +128,43 @@ export const pollUntilFound = async ({
             throw err instanceof Error ? err : new Error(String(err))
           }
         } else {
-          logger.info(
-            `[SFTP] Forecast file ${filename} not found.`
-          )
+          logger.info(`[SFTP] Forecast file ${filename} not found.`)
         }
       }
 
       // --- Summary file check and processing ---
       if (!summaryDone && summaryFilename) {
         const summaryFileFound = files.find(
-          (file) => 
-            file.name.startsWith(summaryFilename) &&
-            file.name.endsWith('.TXT')
+          (file) =>
+            file.name.startsWith(summaryFilename) && file.name.endsWith('.TXT')
         )
-        logger.info(`[SFTP] Summary File Match ${JSON.stringify(summaryFileFound)} found.`)
+        logger.info(
+          `[SFTP] Summary File Match ${JSON.stringify(summaryFileFound)} found.`
+        )
 
         if (summaryFileFound) {
-          logger.info(`[SFTP] Summary file ${summaryFileFound.name} found. Fetching content...`)
-          const fileContent = await sftp.get(`${remotePath}${summaryFileFound.name}`)
+          logger.info(
+            `[SFTP] Summary file ${summaryFileFound.name} found. Fetching content...`
+          )
+          const fileContent = await sftp.get(
+            `${remotePath}${summaryFileFound.name}`
+          )
           try {
             // Parse and upsert summary data
             const parsed = parseForecastSummaryTxt(fileContent.toString())
             await summaryCol.replaceOne(
               { type: 'latest' },
-              { type: 'latest', name: summaryFileFound.name, ...parsed, updated: new Date() },
+              {
+                type: 'latest',
+                name: summaryFileFound.name,
+                ...parsed,
+                updated: new Date()
+              },
               { upsert: true }
             )
-            logger.info(`[MongoDB] Upserted latest summary for ${summaryFileFound.name}`)
+            logger.info(
+              `[MongoDB] Upserted latest summary for ${summaryFileFound.name}`
+            )
             summaryDone = true
           } catch (err) {
             logger.error(
@@ -160,9 +174,7 @@ export const pollUntilFound = async ({
             throw err instanceof Error ? err : new Error(String(err))
           }
         } else {
-          logger.info(
-            `[SFTP] Summary file ${summaryFilename} not found.`
-          )
+          logger.info(`[SFTP] Summary file ${summaryFilename} not found.`)
         }
       }
 

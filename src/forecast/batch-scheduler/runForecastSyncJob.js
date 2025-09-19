@@ -8,11 +8,18 @@
 import dayjs from 'dayjs'
 import utc from 'dayjs/plugin/utc.js'
 import { createLogger } from '../../common/helpers/logging/logger.js'
-import { getExpectedFileName, getExpectedSummaryFileName, sleep } from '../helpers/utility.js'
+import {
+  getExpectedFileName,
+  getExpectedSummaryFileName,
+  sleep
+} from '../helpers/utility.js'
 import { pollUntilFound } from '../helpers/pollUntilFound.js'
 import { parseForecastXml } from '../helpers/parse-forecast-xml.js'
 import { parseForecastSummaryTxt } from '../helpers/parse-forecast-summary-txt.js'
-import { COLLECTION_NAME, SUMMARY_COLLECTION_NAME } from '../helpers/constant.js'
+import {
+  COLLECTION_NAME,
+  SUMMARY_COLLECTION_NAME
+} from '../helpers/constant.js'
 import {
   connectSftpThroughProxy,
   connectLocalSftp
@@ -80,9 +87,12 @@ async function runForecastSyncJob(server) {
     const summaryCol = await server.db.collection(SUMMARY_COLLECTION_NAME)
     try {
       await summaryCol.createIndex({ name: 1 }, { unique: true })
-      logger.info("Ensured unique index name for summary")
+      logger.info('Ensured unique index name for summary')
     } catch (err) {
-      logger.error(`"Failed to create index name for summary:", ${err.message}`, err)
+      logger.error(
+        `"Failed to create index name for summary:", ${err.message}`,
+        err
+      )
     }
     // Check if today's summary already exists
     const summaryExists = await summaryCol.countDocuments({
@@ -105,19 +115,22 @@ async function runForecastSyncJob(server) {
      * - Uses the same retry/sleep logic for both.
      */
     await pollUntilFound({
-      type: 'both', 
-      filename, 
-      summaryFilename, 
-      forecastsCol, 
-      parseForecastXml, 
-      summaryCol, 
-      parseForecastSummaryTxt, 
-      logger, 
-      connectSftp: connectLocalSftp, 
-      sleep, 
+      type: 'both',
+      filename,
+      summaryFilename,
+      forecastsCol,
+      parseForecastXml,
+      summaryCol,
+      parseForecastSummaryTxt,
+      logger,
+      connectSftp: connectSftpThroughProxy,
+      sleep
     })
   } catch (err) {
-    logger.error(`[Forecast & Summary Scheduler Sync Job Error] ${err.message}`, err)
+    logger.error(
+      `[Forecast & Summary Scheduler Sync Job Error] ${err.message}`,
+      err
+    )
     throw err instanceof Error ? err : new Error(String(err))
   } finally {
     logger.info(`::::::::::UNLOCKED (forecast & summary)::::::::`)
