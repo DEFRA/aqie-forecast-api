@@ -62,24 +62,14 @@ export const pollUntilFound = async ({
   while (!forecastDone || !summaryDone) {
     const now = dayjs().tz(TIMEZONE)
 
-    // Stop polling if cutoff time passed
     if (now.isAfter(cutoffTime)) {
+      const missingFiles = []
+      if (!forecastDone) missingFiles.push('forecast')
+      if (!summaryDone) missingFiles.push('summary')
       logger.info(
-        `[Polling Ended] Forecast and/or summary file not found by cutoff time (${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} ${TIMEZONE}).`
+        `[Polling Ended] The following file(s) were not found by cutoff time (${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} ${TIMEZONE}): ${missingFiles.join(', ')}.`
       )
       break
-    }
-
-    // Log alerts at 10:00 and 15:00 if files are still missing
-    for (const alertTime of alertTimes) {
-      const alertLabel = alertTime.format('HH:mm')
-      // If current time is equal or after alert time → log it
-      if (!alertsSent.has(alertLabel) && now.isSameOrAfter(alertTime)) {
-        logger.error(
-          `[Alert] Forecast or summary file not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE})`
-        )
-        alertsSent.add(alertLabel)
-      }
     }
 
     logger.info(
@@ -180,6 +170,20 @@ export const pollUntilFound = async ({
 
       // Disconnect from SFTP after each polling attempt
       await sftp.end()
+
+      // Log alerts at 10:00 and 15:00 if files are still missing (after processing)
+      for (const alertTime of alertTimes) {
+        const alertLabel = alertTime.format('HH:mm')
+        if (!alertsSent.has(alertLabel) && now.isSameOrAfter(alertTime)) {
+          const missingFiles = []
+          if (!forecastDone) missingFiles.push('forecast')
+          if (!summaryDone) missingFiles.push('summary')
+          logger.error(
+            `[Alert] The following file(s) were not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE}): ${missingFiles.join(', ')}.`
+          )
+          alertsSent.add(alertLabel)
+        }
+      }
 
       // If either file is still missing, sleep before next attempt
       if (!forecastDone || !summaryDone) {

@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { getForecastsFromDB } from './helpers/get-db-forecasts.js'
 import { config } from '../config.js'
 import { createLogger } from '../common/helpers/logging/logger.js'
