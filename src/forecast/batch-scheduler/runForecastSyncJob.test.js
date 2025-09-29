@@ -1,9 +1,13 @@
 import { runForecastSyncJob } from './runForecastSyncJob.js'
-import { getExpectedFileName } from '../helpers/utility.js'
+import {
+  getExpectedFileName,
+  getExpectedSummaryFileName
+} from '../helpers/utility.js'
 import { pollUntilFound } from '../helpers/pollUntilFound.js'
 
 jest.mock('../helpers/utility.js', () => ({
   getExpectedFileName: jest.fn(),
+  getExpectedSummaryFileName: jest.fn(), // <-- Added summary mock
   sleep: jest.fn()
 }))
 jest.mock('../helpers/pollUntilFound.js', () => ({
@@ -47,6 +51,7 @@ describe('runForecastSyncJob', () => {
     }
 
     getExpectedFileName.mockReturnValue('forecast.xml')
+    getExpectedSummaryFileName.mockReturnValue('summary.txt') // <-- Added summary mock return
   })
 
   afterEach(() => {
@@ -206,7 +211,7 @@ describe('runForecastSyncJob', () => {
     await runForecastSyncJob(mockServer)
 
     expect(mockError).toHaveBeenCalledWith(
-      'Failed to acquire lock for resource - forecasts'
+      'Failed to acquire lock for resource - forecasts or summary'
     )
   })
 })

@@ -171,16 +171,23 @@ export const pollUntilFound = async ({
       // Disconnect from SFTP after each polling attempt
       await sftp.end()
 
-      // Log alerts at 10:00 and 15:00 if files are still missing (after processing)
+      // Log alerts at 10:00 and 15:00 (original logic: always log)
       for (const alertTime of alertTimes) {
         const alertLabel = alertTime.format('HH:mm')
         if (!alertsSent.has(alertLabel) && now.isSameOrAfter(alertTime)) {
+          // Original log (always log, for other teams)
+          logger.error(
+            `[Alert] Forecast file not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE})`
+          )
+          // New log (only log if files are missing)
           const missingFiles = []
           if (!forecastDone) missingFiles.push('forecast')
           if (!summaryDone) missingFiles.push('summary')
-          logger.error(
-            `[Alert] The following file(s) were not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE}): ${missingFiles.join(', ')}.`
-          )
+          if (missingFiles.length > 0) {
+            logger.error(
+              `[Alert] The following file(s) were not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE}): ${missingFiles.join(', ')}.`
+            )
+          }
           alertsSent.add(alertLabel)
         }
       }
