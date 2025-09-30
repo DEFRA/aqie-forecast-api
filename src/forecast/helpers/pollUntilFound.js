@@ -34,10 +34,14 @@ function getAlertTimes(today) {
   return [today.add(TEN, 'hour'), today.add(FIFTEEN, 'hour')]
 }
 
-function getMissingFiles(forecastDone, summaryDone) {
+function getMissingFiles(forecastDone, summaryDone, type) {
   const missing = []
-  if (!forecastDone) missing.push('forecast')
-  if (!summaryDone) missing.push('summary')
+  if ((type === 'both' || type === 'forecast') && !forecastDone) {
+    missing.push('forecast')
+  }
+  if ((type === 'both' || type === 'summary') && !summaryDone) {
+    missing.push('summary')
+  }
   return missing
 }
 
@@ -48,6 +52,7 @@ function logAlerts({
   alertsSent,
   forecastDone,
   summaryDone,
+  type,
   logger
 }) {
   for (const alertTime of alertTimes) {
@@ -56,7 +61,7 @@ function logAlerts({
       logger.error(
         `[Alert] Forecast file not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE})`
       )
-      const missingFiles = getMissingFiles(forecastDone, summaryDone)
+      const missingFiles = getMissingFiles(forecastDone, summaryDone, type)
       if (missingFiles.length > 0) {
         logger.error(
           `[Alert] The following file(s) were not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE}): ${missingFiles.join(', ')}.`
@@ -165,6 +170,79 @@ async function handleSftpError(err, logger, sleep) {
   await sleep(config.get('forecastRetryInterval'))
 }
 
+function initializePollingState(type) {
+  return {
+    forecastDone: !(type === 'both' || type === 'forecast'),
+    summaryDone: !(type === 'both' || type === 'summary'),
+    needsForecast: type === 'both' || type === 'forecast',
+    needsSummary: type === 'both' || type === 'summary'
+  }
+}
+
+function shouldContinuePolling(state) {
+  return (
+    (state.needsForecast && !state.forecastDone) ||
+    (state.needsSummary && !state.summaryDone)
+  )
+}
+
+function logConnectionAttempt(state, filename, summaryFilename, logger) {
+  const lookingFor = []
+  if (state.needsForecast) lookingFor.push(filename)
+  if (state.needsSummary) lookingFor.push(summaryFilename)
+
+  logger.info(
+    `[SFTP] Connecting to check for files: ${lookingFor.filter(Boolean).join(' and ')}`
+  )
+}
+
+async function processFiles({
+  sftp,
+  files,
+  state,
+  filename,
+  summaryFilename,
+  forecastsCol,
+  parseForecastXml,
+  summaryCol,
+  parseForecastSummaryTxt,
+  remotePath,
+  logger
+}) {
+  // Only process forecast if we need it and haven't found it yet
+  if (state.needsForecast && !state.forecastDone) {
+    state.forecastDone = await processForecast({
+      sftp,
+      files,
+      filename,
+      forecastsCol,
+      parseForecastXml,
+      remotePath,
+      logger
+    })
+  }
+
+  // Only process summary if we need it and haven't found it yet
+  if (state.needsSummary && !state.summaryDone) {
+    state.summaryDone = await processSummary({
+      sftp,
+      files,
+      summaryFilename,
+      summaryCol,
+      parseForecastSummaryTxt,
+      remotePath,
+      logger
+    })
+  }
+}
+
+function shouldSleepAfterAttempt(state) {
+  return (
+    (state.needsForecast && !state.forecastDone) ||
+    (state.needsSummary && !state.summaryDone)
+  )
+}
+
 export const pollUntilFound = async ({
   type = 'both',
   filename,
@@ -181,59 +259,63 @@ export const pollUntilFound = async ({
   const cutoffTime = today.add(TWENTY_THREE, 'hour').add(THIRTY, 'minute')
   const alertTimes = getAlertTimes(today)
   const alertsSent = new Set()
+  const remotePath = `/Incoming Shares/AQIE/MetOffice/`
+
   logger.info(
     `[Polling Start] Will stop polling at: ${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} (${TIMEZONE})`
   )
 
-  let forecastDone = false
-  let summaryDone = false
-  const remotePath = `/Incoming Shares/AQIE/MetOffice/`
+  const state = initializePollingState(type)
 
-  while (!forecastDone || !summaryDone) {
+  while (shouldContinuePolling(state)) {
     const now = dayjs().tz(TIMEZONE)
+
     if (now.isAfter(cutoffTime)) {
-      const missingFiles = getMissingFiles(forecastDone, summaryDone)
+      const missingFiles = getMissingFiles(
+        state.forecastDone,
+        state.summaryDone,
+        type
+      )
       logger.info(
         `[Polling Ended] The following file(s) were not found by cutoff time (${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} ${TIMEZONE}): ${missingFiles.join(', ')}.`
       )
       break
     }
 
-    logger.info(
-      `[SFTP] Connecting to check for files: ${filename} and ${summaryFilename}`
-    )
+    logConnectionAttempt(state, filename, summaryFilename, logger)
+
     try {
       const { sftp } = await connectSftp()
       const files = await sftp.list(remotePath)
-      forecastDone = await processForecast({
+
+      await processFiles({
         sftp,
         files,
+        state,
         filename,
+        summaryFilename,
         forecastsCol,
         parseForecastXml,
-        remotePath,
-        logger
-      })
-      summaryDone = await processSummary({
-        sftp,
-        files,
-        summaryFilename,
         summaryCol,
         parseForecastSummaryTxt,
         remotePath,
         logger
       })
+
       await sftp.end()
+
       logAlerts({
         now,
         today,
         alertTimes,
         alertsSent,
-        forecastDone,
-        summaryDone,
+        forecastDone: state.forecastDone,
+        summaryDone: state.summaryDone,
+        type,
         logger
       })
-      if (!forecastDone || !summaryDone) {
+
+      if (shouldSleepAfterAttempt(state)) {
         logger.info(
           `[Polling] Not all files found. Retrying in ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins.`
         )
