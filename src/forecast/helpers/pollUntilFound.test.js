@@ -392,6 +392,96 @@ describe('pollUntilFound', () => {
       expect(mockConnectSftp).toHaveBeenCalledTimes(1)
       expect(mockSleep).toHaveBeenCalledWith(100)
     })
+
+    test('should handle XML parsing errors in processForecast', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return {
+              add: jest.fn().mockReturnValue(mockCutoffTime)
+            }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest
+          .fn()
+          .mockReturnValueOnce(false) // First check: before cutoff (enter loop)
+          .mockReturnValue(true), // Second check: past cutoff (exit after processing)
+        format: jest.fn().mockReturnValue('2025-09-25 15:00:00'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      dayjs
+        .mockReturnValueOnce({
+          tz: jest.fn().mockReturnValue({
+            startOf: jest.fn().mockReturnValue(mockTodayObj)
+          })
+        })
+        .mockReturnValue({
+          tz: jest.fn().mockReturnValue(mockNowObj)
+        })
+
+      // Mock SFTP to return a forecast file
+      mockSftp.list.mockResolvedValue([
+        { name: 'MetOfficeDefraAQSites_20250925.xml' }
+      ])
+      mockSftp.get.mockResolvedValue('<xml>malformed content</xml>')
+
+      // Mock parseForecastXml to throw an error
+      const xmlError = new Error('XML parsing failed')
+      mockParseForecastXml.mockRejectedValue(xmlError)
+
+      // Don't expect throw - error is handled internally
+      await pollUntilFound({
+        type: 'forecast',
+        filename: 'MetOfficeDefraAQSites_20250925.xml',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      // Verify SFTP operations occurred
+      expect(mockConnectSftp).toHaveBeenCalledTimes(1)
+      expect(mockSftp.list).toHaveBeenCalledWith(
+        '/Incoming Shares/AQIE/MetOffice/'
+      )
+      expect(mockSftp.get).toHaveBeenCalledWith(
+        '/Incoming Shares/AQIE/MetOffice/MetOfficeDefraAQSites_20250925.xml'
+      )
+
+      // Verify parsing was attempted
+      expect(mockParseForecastXml).toHaveBeenCalledWith(
+        '<xml>malformed content</xml>'
+      )
+
+      // Verify error was logged
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[XML Parsing Error] Forecast file found but could not be parsed: XML parsing failed',
+        xmlError
+      )
+
+      // Verify database operation was NOT called due to error
+      expect(mockForecastsCol.bulkWrite).not.toHaveBeenCalled()
+    })
   })
 
   describe('alert system', () => {

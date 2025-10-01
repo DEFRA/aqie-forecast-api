@@ -1,10 +1,7 @@
-export function parseForecastSummaryTxt(txt) {
-  const lines = txt.split(/\r?\n/)
-  const result = {}
+function createFlushBuffer(result) {
   let currentLabel = null
   let buffer = []
 
-  // Helper to flush buffer to result
   const flushBuffer = () => {
     if (currentLabel && buffer.length) {
       result[currentLabel] = buffer.join(' ')
@@ -13,7 +10,18 @@ export function parseForecastSummaryTxt(txt) {
     }
   }
 
-  // Extract issue date from "Issued on ..." line
+  return {
+    flushBuffer,
+    getCurrentLabel: () => currentLabel,
+    setCurrentLabel: (label) => {
+      currentLabel = label
+    },
+    addToBuffer: (text) => buffer.push(text),
+    hasBuffer: () => buffer.length > 0
+  }
+}
+
+function extractIssueDate(lines, result) {
   for (const line of lines) {
     const match = line.match(/^Issued on (.+) at ([0-9:]+) Local time/i)
     if (match) {
@@ -27,22 +35,48 @@ export function parseForecastSummaryTxt(txt) {
       break // Only need the first match
     }
   }
+}
 
+function processSectionLine(line, sectionHeaders, bufferManager) {
+  const lower = line.toLowerCase()
+
+  if (sectionHeaders.has(lower)) {
+    bufferManager.flushBuffer()
+    bufferManager.setCurrentLabel(lower.replace(':', ''))
+  } else if (
+    bufferManager.getCurrentLabel() &&
+    line &&
+    !sectionHeaders.has(lower)
+  ) {
+    bufferManager.addToBuffer(line)
+  } else if (
+    !line &&
+    bufferManager.getCurrentLabel() &&
+    bufferManager.hasBuffer()
+  ) {
+    bufferManager.flushBuffer()
+  } else {
+    // Handle all other cases - lines that don't match any condition
+    // This ensures the if-else chain is complete
+  }
+}
+
+export function parseForecastSummaryTxt(txt) {
+  const lines = txt.split(/\r?\n/)
+  const result = {}
+  const bufferManager = createFlushBuffer(result)
+
+  // Extract issue date from "Issued on ..." line
+  extractIssueDate(lines, result)
+
+  // Process section content
   const sectionHeaders = new Set(['today:', 'tomorrow:', 'outlook:'])
 
   for (const rawLine of lines) {
     const line = rawLine.trim()
-    const lower = line.toLowerCase()
-
-    if (sectionHeaders.has(lower)) {
-      flushBuffer()
-      currentLabel = lower.replace(':', '')
-    } else if (currentLabel && line && !sectionHeaders.has(lower)) {
-      buffer.push(line)
-    } else if (!line && currentLabel && buffer.length) {
-      flushBuffer()
-    }
+    processSectionLine(line, sectionHeaders, bufferManager)
   }
-  flushBuffer()
+
+  bufferManager.flushBuffer()
   return result
 }
