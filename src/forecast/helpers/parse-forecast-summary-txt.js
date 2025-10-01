@@ -28,16 +28,16 @@ export function parseForecastSummaryTxt(txt) {
     }
   }
 
-  const sectionHeaders = ['today:', 'tomorrow:', 'outlook:']
+  const sectionHeaders = new Set(['today:', 'tomorrow:', 'outlook:'])
 
   for (const rawLine of lines) {
     const line = rawLine.trim()
     const lower = line.toLowerCase()
 
-    if (sectionHeaders.includes(lower)) {
+    if (sectionHeaders.has(lower)) {
       flushBuffer()
       currentLabel = lower.replace(':', '')
-    } else if (currentLabel && line && !sectionHeaders.includes(lower)) {
+    } else if (currentLabel && line && !sectionHeaders.has(lower)) {
       buffer.push(line)
     } else if (!line && currentLabel && buffer.length) {
       flushBuffer()

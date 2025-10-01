@@ -81,7 +81,9 @@ async function processForecast({
   remotePath,
   logger
 }) {
-  if (!filename) return false
+  if (!filename) {
+    return false
+  }
   const fileFound = files.find((f) => f.name.trim() === filename.trim())
   logger.info(`[SFTP] Forecast File Match ${JSON.stringify(fileFound)} found.`)
   if (!fileFound) {
@@ -122,7 +124,9 @@ async function processSummary({
   remotePath,
   logger
 }) {
-  if (!summaryFilename) return false
+  if (!summaryFilename) {
+    return false
+  }
   const summaryFileFound = files.find(
     (f) => f.name.startsWith(summaryFilename) && f.name.endsWith('.TXT')
   )
@@ -188,8 +192,12 @@ function shouldContinuePolling(state) {
 
 function logConnectionAttempt(state, filename, summaryFilename, logger) {
   const lookingFor = []
-  if (state.needsForecast) lookingFor.push(filename)
-  if (state.needsSummary) lookingFor.push(summaryFilename)
+  if (state.needsForecast) {
+    lookingFor.push(filename)
+  }
+  if (state.needsSummary) {
+    lookingFor.push(summaryFilename)
+  }
 
   logger.info(
     `[SFTP] Connecting to check for files: ${lookingFor.filter(Boolean).join(' and ')}`
@@ -234,13 +242,6 @@ async function processFiles({
       logger
     })
   }
-}
-
-function shouldSleepAfterAttempt(state) {
-  return (
-    (state.needsForecast && !state.forecastDone) ||
-    (state.needsSummary && !state.summaryDone)
-  )
 }
 
 export const pollUntilFound = async ({
@@ -315,7 +316,7 @@ export const pollUntilFound = async ({
         logger
       })
 
-      if (shouldSleepAfterAttempt(state)) {
+      if (shouldContinuePolling(state)) {
         logger.info(
           `[Polling] Not all files found. Retrying in ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins.`
         )
