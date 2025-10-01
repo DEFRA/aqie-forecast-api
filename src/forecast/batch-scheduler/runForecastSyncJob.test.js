@@ -1,9 +1,13 @@
 import { runForecastSyncJob } from './runForecastSyncJob.js'
-import { getExpectedFileName } from '../helpers/utility.js'
+import {
+  getExpectedFileName,
+  getExpectedSummaryFileName
+} from '../helpers/utility.js'
 import { pollUntilFound } from '../helpers/pollUntilFound.js'
 
 jest.mock('../helpers/utility.js', () => ({
   getExpectedFileName: jest.fn(),
+  getExpectedSummaryFileName: jest.fn(),
   sleep: jest.fn()
 }))
 jest.mock('../helpers/pollUntilFound.js', () => ({
@@ -23,10 +27,13 @@ jest.mock('../../common/helpers/logging/logger.js', () => ({
 }))
 
 describe('runForecastSyncJob', () => {
-  let mockServer, mockCollection
+  let mockServer, mockCollection, mockLock, mockFree
 
   beforeEach(() => {
     jest.clearAllMocks()
+
+    mockFree = jest.fn()
+    mockLock = { free: mockFree }
 
     mockCollection = {
       createIndex: jest.fn(),
@@ -40,13 +47,12 @@ describe('runForecastSyncJob', () => {
         collection: jest.fn().mockResolvedValue(mockCollection)
       },
       locker: {
-        lock: jest.fn().mockResolvedValue({
-          free: jest.fn()
-        })
+        lock: jest.fn().mockResolvedValue(mockLock)
       }
     }
 
     getExpectedFileName.mockReturnValue('forecast.xml')
+    getExpectedSummaryFileName.mockReturnValue('summary.txt')
   })
 
   afterEach(() => {
@@ -129,8 +135,6 @@ describe('runForecastSyncJob', () => {
       toArray: jest.fn().mockResolvedValue([{ name: 'forecasts' }])
     })
     mockCollection.countDocuments.mockResolvedValue(0)
-
-    // Simulate a non-Error rejection
     pollUntilFound.mockRejectedValueOnce('non-error string')
 
     await expect(runForecastSyncJob(mockServer)).rejects.toThrow(
@@ -139,10 +143,7 @@ describe('runForecastSyncJob', () => {
   })
 
   it('should return early if lock is not acquired', async () => {
-    const mockLock = null
-    mockServer.locker = {
-      lock: jest.fn().mockResolvedValue(mockLock)
-    }
+    mockServer.locker.lock.mockResolvedValueOnce(null)
 
     await runForecastSyncJob(mockServer)
 
@@ -151,18 +152,10 @@ describe('runForecastSyncJob', () => {
   })
 
   it('should release lock after successful execution', async () => {
-    const mockFree = jest.fn()
-    const mockLock = { free: mockFree }
-
-    mockServer.locker = {
-      lock: jest.fn().mockResolvedValue(mockLock)
-    }
-
     mockServer.db.listCollections.mockReturnValue({
       toArray: jest.fn().mockResolvedValue([])
     })
     mockCollection.countDocuments.mockResolvedValue(0)
-
     pollUntilFound.mockResolvedValue()
 
     await runForecastSyncJob(mockServer)
@@ -171,13 +164,6 @@ describe('runForecastSyncJob', () => {
   })
 
   it('should release lock even if an error is thrown', async () => {
-    const mockFree = jest.fn()
-    const mockLock = { free: mockFree }
-
-    mockServer.locker = {
-      lock: jest.fn().mockResolvedValue(mockLock)
-    }
-
     mockServer.db.listCollections.mockImplementation(() => {
       throw new Error('DB failure')
     })
@@ -192,21 +178,97 @@ describe('runForecastSyncJob', () => {
       info: jest.fn(),
       error: mockError
     }
-    jest.mock('../../common/helpers/logging/logger.js', () => ({
+    jest.doMock('../../common/helpers/logging/logger.js', () => ({
       createLogger: () => mockLogger
     }))
-
-    // Re-require the module to apply the new mock
-    const { runForecastSyncJob } = await import('./runForecastSyncJob.js')
-
-    mockServer.locker = {
-      lock: jest.fn().mockResolvedValue(null)
-    }
-
-    await runForecastSyncJob(mockServer)
-
+    const { runForecastSyncJob: runJob } = await import(
+      './runForecastSyncJob.js'
+    )
+    mockServer.locker.lock.mockResolvedValueOnce(null)
+    await runJob(mockServer)
     expect(mockError).toHaveBeenCalledWith(
-      'Failed to acquire lock for resource - forecasts'
+      'Failed to acquire lock for resource - forecasts or summary'
+    )
+  })
+
+  // --- Additional coverage tests ---
+
+  it('should create summary collection and index if not exists', async () => {
+    // Simulate summary collection missing
+    mockServer.db.listCollections
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecasts' }])
+      })
+      .mockReturnValueOnce({ toArray: jest.fn().mockResolvedValue([]) })
+    mockCollection.countDocuments.mockResolvedValue(0)
+    await runForecastSyncJob(mockServer)
+    expect(mockServer.db.createCollection).toHaveBeenCalledWith(
+      'forecast-summary'
+    )
+    expect(mockCollection.createIndex).toHaveBeenCalledWith(
+      { name: 1 },
+      { unique: true }
+    )
+  })
+
+  it('should log error if summary index creation fails but continue', async () => {
+    mockServer.db.listCollections
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecasts' }])
+      })
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecast-summary' }])
+      })
+    mockCollection.countDocuments.mockResolvedValue(0)
+    mockCollection.createIndex.mockRejectedValueOnce(
+      new Error('Summary Index error')
+    )
+    await runForecastSyncJob(mockServer)
+    expect(pollUntilFound).toHaveBeenCalled()
+  })
+
+  it('should call polling if summary exists but forecast does not', async () => {
+    mockServer.db.listCollections
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecasts' }])
+      })
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecast-summary' }])
+      })
+    mockCollection.countDocuments
+      .mockResolvedValueOnce(0) // forecast does not exist
+      .mockResolvedValueOnce(1) // summary exists
+    await runForecastSyncJob(mockServer)
+    expect(pollUntilFound).toHaveBeenCalled()
+  })
+
+  it('should skip polling if both forecast and summary already exist for today', async () => {
+    mockServer.db.listCollections
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecasts' }])
+      })
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecast-summary' }])
+      })
+    mockCollection.countDocuments
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1)
+    await runForecastSyncJob(mockServer)
+    expect(pollUntilFound).not.toHaveBeenCalled()
+  })
+
+  it('should handle error thrown by createCollection for summary', async () => {
+    mockServer.db.listCollections
+      .mockReturnValueOnce({
+        toArray: jest.fn().mockResolvedValue([{ name: 'forecasts' }])
+      })
+      .mockReturnValueOnce({ toArray: jest.fn().mockResolvedValue([]) })
+    mockServer.db.createCollection.mockImplementationOnce(() => {
+      throw new Error('Create summary collection error')
+    })
+    mockCollection.countDocuments.mockResolvedValue(0)
+    await expect(runForecastSyncJob(mockServer)).rejects.toThrow(
+      'Create summary collection error'
     )
   })
 })

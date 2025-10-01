@@ -1,4 +1,3 @@
-/* eslint-disable */
 import { schedule } from 'node-cron'
 import { config } from '../../config.js'
 import { createLogger } from '../../common/helpers/logging/logger.js'

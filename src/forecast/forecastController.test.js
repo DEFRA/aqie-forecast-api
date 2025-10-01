@@ -7,11 +7,15 @@ jest.mock('../common/helpers/logging/logger.js', () => ({
 }))
 import { forecastController } from './forecastController.js'
 import { getForecastsFromDB } from './helpers/get-db-forecasts.js'
+import { getForecastSummaryFromDB } from './helpers/get-db-summary.js'
 import { config } from '../config.js'
+
 jest.mock('./helpers/get-db-forecasts.js', () => ({
   getForecastsFromDB: jest.fn()
 }))
-
+jest.mock('./helpers/get-db-summary.js', () => ({
+  getForecastSummaryFromDB: jest.fn()
+}))
 jest.mock('../config.js', () => ({
   config: {
     get: jest.fn()
@@ -23,8 +27,15 @@ describe('forecastController.handler', () => {
     { id: 1, weather: 'sunny' },
     { id: 2, weather: 'cloudy' }
   ]
+  const mockSummary = { type: 'latest', summary: 'Good air quality' }
 
-  const mockRequest = { db: {} }
+  const mockDb = {
+    collection: jest.fn().mockReturnValue({
+      findOne: jest.fn().mockResolvedValue(mockSummary)
+    })
+  }
+
+  const mockRequest = { db: mockDb }
 
   const mockResponseToolkit = {
     response: jest.fn().mockReturnThis(),
@@ -36,8 +47,9 @@ describe('forecastController.handler', () => {
     jest.clearAllMocks()
   })
 
-  it('should return forecasts with 200 status and correct headers', async () => {
+  it('should return forecasts and summary with 200 status and correct headers', async () => {
     getForecastsFromDB.mockResolvedValue(mockForecasts)
+    getForecastSummaryFromDB.mockResolvedValue(mockSummary)
     config.get.mockReturnValue('http://localhost:3000')
 
     const result = await forecastController.handler(
@@ -46,10 +58,12 @@ describe('forecastController.handler', () => {
     )
 
     expect(getForecastsFromDB).toHaveBeenCalledWith(mockRequest.db)
+    expect(getForecastSummaryFromDB).toHaveBeenCalledWith(mockRequest.db)
     expect(config.get).toHaveBeenCalledWith('allowOriginUrl')
     expect(mockResponseToolkit.response).toHaveBeenCalledWith({
       message: 'success',
-      forecasts: mockForecasts
+      forecasts: mockForecasts,
+      'forecast-summary': mockSummary // <-- updated property name
     })
     expect(mockResponseToolkit.code).toHaveBeenCalledWith(200)
     expect(mockResponseToolkit.header).toHaveBeenCalledWith(
@@ -59,8 +73,9 @@ describe('forecastController.handler', () => {
     expect(result).toBe(mockResponseToolkit)
   })
 
-  it('should handle empty forecasts array', async () => {
+  it('should handle empty forecasts array and summary', async () => {
     getForecastsFromDB.mockResolvedValue([])
+    getForecastSummaryFromDB.mockResolvedValue(null)
     config.get.mockReturnValue('*')
 
     const result = await forecastController.handler(
@@ -70,7 +85,8 @@ describe('forecastController.handler', () => {
 
     expect(mockResponseToolkit.response).toHaveBeenCalledWith({
       message: 'success',
-      forecasts: []
+      forecasts: [],
+      'forecast-summary': null // <-- updated property name
     })
     expect(mockResponseToolkit.code).toHaveBeenCalledWith(200)
     expect(mockResponseToolkit.header).toHaveBeenCalledWith(
@@ -86,5 +102,14 @@ describe('forecastController.handler', () => {
     await expect(
       forecastController.handler(mockRequest, mockResponseToolkit)
     ).rejects.toThrow('DB error')
+  })
+
+  it('should throw error if getForecastSummaryFromDB fails', async () => {
+    getForecastsFromDB.mockResolvedValue(mockForecasts)
+    getForecastSummaryFromDB.mockRejectedValue(new Error('Summary DB error'))
+
+    await expect(
+      forecastController.handler(mockRequest, mockResponseToolkit)
+    ).rejects.toThrow('Summary DB error')
   })
 })

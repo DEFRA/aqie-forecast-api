@@ -1,1 +1,1 @@
-npm run git:pre-commit-hook
+npm.cmd run git:pre-commit-hook

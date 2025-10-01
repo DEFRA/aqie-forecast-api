@@ -1,6 +1,15 @@
-/** This polling loops continue polling every 15 minutes until the file is found and successfully parsed and inserted into the database
- * Connect → Check → Disconnect → Sleep → Repeat
- * After sleeping, the script re-establishes a new SFTP connection
+/**
+ * This polling loop continues polling every 15 minutes until both forecast and summary files
+ * are found, parsed, and inserted into the database.
+ *
+ * The process is:
+ *   1. Connect to SFTP
+ *   2. Check for both files
+ *   3. Disconnect from SFTP
+ *   4. Sleep if not found, then repeat
+ *
+ * Alerts are logged at 10:00 and 15:00 UK time if files are still missing.
+ * Polling stops at 11:30pm UK time.
  */
 import { config } from '../../config.js'
 import dayjs from 'dayjs'
@@ -21,98 +30,300 @@ dayjs.extend(isSameOrAfter)
 
 const TIMEZONE = 'Europe/London'
 
-export const pollUntilFound = async ({
+function getAlertTimes(today) {
+  return [today.add(TEN, 'hour'), today.add(FIFTEEN, 'hour')]
+}
+
+function getMissingFiles(forecastDone, summaryDone, type) {
+  const missing = []
+  if ((type === 'both' || type === 'forecast') && !forecastDone) {
+    missing.push('forecast')
+  }
+  if ((type === 'both' || type === 'summary') && !summaryDone) {
+    missing.push('summary')
+  }
+  return missing
+}
+
+function logAlerts({
+  now,
+  today,
+  alertTimes,
+  alertsSent,
+  forecastDone,
+  summaryDone,
+  type,
+  logger
+}) {
+  for (const alertTime of alertTimes) {
+    const alertLabel = alertTime.format('HH:mm')
+    if (!alertsSent.has(alertLabel) && now.isSameOrAfter(alertTime)) {
+      logger.error(
+        `[Alert] Forecast file not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE})`
+      )
+      const missingFiles = getMissingFiles(forecastDone, summaryDone, type)
+      if (missingFiles.length > 0) {
+        logger.error(
+          `[Alert] The following file(s) were not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE}): ${missingFiles.join(', ')}.`
+        )
+      }
+      alertsSent.add(alertLabel)
+    }
+  }
+}
+
+async function processForecast({
+  sftp,
+  files,
   filename,
-  logger,
   forecastsCol,
   parseForecastXml,
+  remotePath,
+  logger
+}) {
+  if (!filename) {
+    return false
+  }
+  const fileFound = files.find((f) => f.name.trim() === filename.trim())
+  logger.info(`[SFTP] Forecast File Match ${JSON.stringify(fileFound)} found.`)
+  if (!fileFound) {
+    logger.info(`[SFTP] Forecast file ${filename} not found.`)
+    return false
+  }
+  logger.info(`[SFTP] Forecast file ${filename} found. Fetching content...`)
+  const fileContent = await sftp.get(`${remotePath}${filename}`)
+  try {
+    const parsedForecasts = await parseForecastXml(fileContent)
+    const bulkOps = (forecast) => ({
+      replaceOne: {
+        filter: { name: forecast.name },
+        replacement: forecast,
+        upsert: true
+      }
+    })
+    await forecastsCol.bulkWrite(parsedForecasts.map(bulkOps))
+    logger.info(
+      `[DB] Forecasts inserted successfully for ${parsedForecasts.length} locations.`
+    )
+    return true
+  } catch (err) {
+    logger.error(
+      `[XML Parsing Error] Forecast file found but could not be parsed: ${err.message}`,
+      err
+    )
+    throw err instanceof Error ? err : new Error(String(err))
+  }
+}
+
+async function processSummary({
+  sftp,
+  files,
+  summaryFilename,
+  summaryCol,
+  parseForecastSummaryTxt,
+  remotePath,
+  logger
+}) {
+  if (!summaryFilename) {
+    return false
+  }
+  const summaryFileFound = files.find(
+    (f) => f.name.startsWith(summaryFilename) && f.name.endsWith('.TXT')
+  )
+  logger.info(
+    `[SFTP] Summary File Match ${JSON.stringify(summaryFileFound)} found.`
+  )
+  if (!summaryFileFound) {
+    logger.info(`[SFTP] Summary file ${summaryFilename} not found.`)
+    return false
+  }
+  logger.info(
+    `[SFTP] Summary file ${summaryFileFound.name} found. Fetching content...`
+  )
+  const fileContent = await sftp.get(`${remotePath}${summaryFileFound.name}`)
+  try {
+    const parsed = parseForecastSummaryTxt(fileContent.toString())
+    await summaryCol.replaceOne(
+      { type: 'latest' },
+      {
+        type: 'latest',
+        name: summaryFileFound.name,
+        ...parsed,
+        updated: new Date()
+      },
+      { upsert: true }
+    )
+    logger.info(
+      `[MongoDB] Upserted latest summary for ${summaryFileFound.name}`
+    )
+    return true
+  } catch (err) {
+    logger.error(
+      `[TXT Parsing Error] Summary file found but could not be parsed: ${err.message}`,
+      err
+    )
+    throw err instanceof Error ? err : new Error(String(err))
+  }
+}
+
+async function handleSftpError(err, logger, sleep) {
+  logger.error(`[Error] While checking SFTP: ${err.message}`, err)
+  logger.info(
+    `[Retry] Waiting ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins before next attempt.`
+  )
+  await sleep(config.get('forecastRetryInterval'))
+}
+
+function initializePollingState(type) {
+  return {
+    forecastDone: !(type === 'both' || type === 'forecast'),
+    summaryDone: !(type === 'both' || type === 'summary'),
+    needsForecast: type === 'both' || type === 'forecast',
+    needsSummary: type === 'both' || type === 'summary'
+  }
+}
+
+function shouldContinuePolling(state) {
+  return (
+    (state.needsForecast && !state.forecastDone) ||
+    (state.needsSummary && !state.summaryDone)
+  )
+}
+
+function logConnectionAttempt(state, filename, summaryFilename, logger) {
+  const lookingFor = []
+  if (state.needsForecast) {
+    lookingFor.push(filename)
+  }
+  if (state.needsSummary) {
+    lookingFor.push(summaryFilename)
+  }
+
+  logger.info(
+    `[SFTP] Connecting to check for files: ${lookingFor.filter(Boolean).join(' and ')}`
+  )
+}
+
+async function processFiles({
+  sftp,
+  files,
+  state,
+  filename,
+  summaryFilename,
+  forecastsCol,
+  parseForecastXml,
+  summaryCol,
+  parseForecastSummaryTxt,
+  remotePath,
+  logger
+}) {
+  // Only process forecast if we need it and haven't found it yet
+  if (state.needsForecast && !state.forecastDone) {
+    state.forecastDone = await processForecast({
+      sftp,
+      files,
+      filename,
+      forecastsCol,
+      parseForecastXml,
+      remotePath,
+      logger
+    })
+  }
+
+  // Only process summary if we need it and haven't found it yet
+  if (state.needsSummary && !state.summaryDone) {
+    state.summaryDone = await processSummary({
+      sftp,
+      files,
+      summaryFilename,
+      summaryCol,
+      parseForecastSummaryTxt,
+      remotePath,
+      logger
+    })
+  }
+}
+
+export const pollUntilFound = async ({
+  type = 'both',
+  filename,
+  summaryFilename,
+  forecastsCol,
+  parseForecastXml,
+  summaryCol,
+  parseForecastSummaryTxt,
+  logger,
   connectSftp,
   sleep
 }) => {
-  const today = dayjs().tz(TIMEZONE).startOf('day') // UK local midnight
-  const cutoffTime = today.add(TWENTY_THREE, 'hour').add(THIRTY, 'minute') // 11:30pm UK time
-  const alertTimes = [
-    today.add(TEN, 'hour').add(0, 'minute'), // 10:00 UK time
-    today.add(FIFTEEN, 'hour').add(0, 'minute') // 15:00 UK time
-  ]
-  const alertsSent = new Set() // Track which alerts are already sent
+  const today = dayjs().tz(TIMEZONE).startOf('day')
+  const cutoffTime = today.add(TWENTY_THREE, 'hour').add(THIRTY, 'minute')
+  const alertTimes = getAlertTimes(today)
+  const alertsSent = new Set()
+  const remotePath = `/Incoming Shares/AQIE/MetOffice/`
 
   logger.info(
     `[Polling Start] Will stop polling at: ${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} (${TIMEZONE})`
   )
 
-  while (true) {
+  const state = initializePollingState(type)
+
+  while (shouldContinuePolling(state)) {
     const now = dayjs().tz(TIMEZONE)
 
-    // Stop polling if cutoff time passed
     if (now.isAfter(cutoffTime)) {
+      const missingFiles = getMissingFiles(
+        state.forecastDone,
+        state.summaryDone,
+        type
+      )
       logger.info(
-        `[Polling Ended] Forecast file not found by cutoff time (${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} ${TIMEZONE}).`
+        `[Polling Ended] The following file(s) were not found by cutoff time (${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} ${TIMEZONE}): ${missingFiles.join(', ')}.`
       )
       break
     }
 
-    // Check both 10:00 and 15:00 alerts
-    for (const alertTime of alertTimes) {
-      const alertLabel = alertTime.format('HH:mm')
-      // If current time is equal or after alert time → log it
-      if (!alertsSent.has(alertLabel) && now.isSameOrAfter(alertTime)) {
-        logger.error(
-          `[Alert] Forecast file not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE})`
-        )
-        alertsSent.add(alertLabel)
-      }
-    }
+    logConnectionAttempt(state, filename, summaryFilename, logger)
 
-    logger.info(`[SFTP] Connecting to check for file ${filename}`)
     try {
       const { sftp } = await connectSftp()
-      const remotePath = `/Incoming Shares/AQIE/MetOffice/`
       const files = await sftp.list(remotePath)
 
-      const fileFound = files.find(
-        (file) => file.name.trim() === filename.trim()
-      )
-      logger.info(`[SFTP] File Match ${JSON.stringify(fileFound)} found.`)
+      await processFiles({
+        sftp,
+        files,
+        state,
+        filename,
+        summaryFilename,
+        forecastsCol,
+        parseForecastXml,
+        summaryCol,
+        parseForecastSummaryTxt,
+        remotePath,
+        logger
+      })
 
-      if (fileFound) {
-        logger.info(`[SFTP] File ${filename} found. Fetching content...`)
-        const fileContent = await sftp.get(`${remotePath}${filename}`)
-        await sftp.end()
-        try {
-          const parsedForecasts = await parseForecastXml(fileContent)
-          const bulkOps = (forecast) => ({
-            replaceOne: {
-              filter: { name: forecast.name },
-              replacement: forecast,
-              upsert: true
-            }
-          })
-          await forecastsCol.bulkWrite(parsedForecasts.map(bulkOps))
-          logger.info(
-            `[DB] Forecasts inserted successfully for ${parsedForecasts.length} locations.`
-          )
-          break // Stop polling after success
-        } catch (err) {
-          logger.error(
-            `[XML Parsing Error] File found but could not be parsed: ${err.message}`,
-            err
-          )
-          throw err instanceof Error ? err : new Error(String(err))
-        }
-      } else {
+      await sftp.end()
+
+      logAlerts({
+        now,
+        today,
+        alertTimes,
+        alertsSent,
+        forecastDone: state.forecastDone,
+        summaryDone: state.summaryDone,
+        type,
+        logger
+      })
+
+      if (shouldContinuePolling(state)) {
         logger.info(
-          `[SFTP] File ${filename} not found. Retrying in ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins.`
+          `[Polling] Not all files found. Retrying in ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins.`
         )
-        await sftp.end()
         await sleep(config.get('forecastRetryInterval'))
       }
     } catch (err) {
-      logger.error(`[Error] While checking SFTP: ${err.message}`, err)
-      logger.info(
-        `[Retry] Waiting ${config.get('forecastRetryInterval') / RETRY_MINUTES} mins before next attempt.`
-      )
-      await sleep(config.get('forecastRetryInterval'))
+      await handleSftpError(err, logger, sleep)
     }
   }
 }

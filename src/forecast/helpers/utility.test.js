@@ -1,21 +1,26 @@
-import { sleep, getExpectedFileName } from './utility.js'
 import dayjs from 'dayjs'
+import {
+  getExpectedFileName,
+  getExpectedSummaryFileName,
+  sleep
+} from './utility.js'
 
-describe('sleep', () => {
-  jest.useFakeTimers()
-
-  test('should resolve after specified time', async () => {
-    const ms = 1000
-    const promise = sleep(ms)
-    jest.advanceTimersByTime(ms)
-    await expect(promise).resolves.toBeUndefined()
-  })
-})
-
-describe('getExpectedFileName', () => {
-  test('should return correct filename for today', () => {
+describe('utility.js', () => {
+  it('getExpectedFileName returns correct filename', () => {
     const today = dayjs().format('YYYYMMDD')
-    const expected = `MetOfficeDefraAQSites_${today}.xml`
-    expect(getExpectedFileName()).toBe(expected)
+    expect(getExpectedFileName()).toBe(`MetOfficeDefraAQSites_${today}.xml`)
+  })
+
+  it('getExpectedSummaryFileName returns correct filename', () => {
+    const today = dayjs().format('YYYY-MM-DD')
+    expect(getExpectedSummaryFileName()).toBe(
+      `EMARC_AirQualityForecast_${today}-`
+    )
+  })
+
+  it('sleep resolves after given ms', async () => {
+    const start = Date.now()
+    await sleep(10)
+    expect(Date.now() - start).toBeGreaterThanOrEqual(10)
   })
 })
