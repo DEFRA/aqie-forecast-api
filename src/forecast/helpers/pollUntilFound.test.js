@@ -670,5 +670,117 @@ describe('pollUntilFound', () => {
       expect(mockSftp.list).toHaveBeenCalledTimes(1)
       expect(mockSftp.end).toHaveBeenCalledTimes(1)
     })
+
+    test('returns false when no forecast filename provided', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return {
+              add: jest.fn().mockReturnValue(mockCutoffTime)
+            }
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest
+          .fn()
+          .mockReturnValueOnce(false) // Before cutoff initially
+          .mockReturnValue(true), // Past cutoff on second check
+        format: jest.fn().mockReturnValue('2025-09-25 15:00:00'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      dayjs
+        .mockReturnValueOnce({
+          tz: jest.fn().mockReturnValue({
+            startOf: jest.fn().mockReturnValue(mockTodayObj)
+          })
+        })
+        .mockReturnValue({
+          tz: jest.fn().mockReturnValue(mockNowObj)
+        })
+
+      // Mock SFTP to return files, but filename is null/undefined
+      mockSftp.list.mockResolvedValue([
+        { name: 'MetOfficeDefraAQSites_20250925.xml' }
+      ])
+
+      await pollUntilFound({
+        type: 'forecast',
+        filename: null, // No filename provided
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      // Should not call parsing function since no filename
+      expect(mockParseForecastXml).not.toHaveBeenCalled()
+      expect(mockForecastsCol.bulkWrite).not.toHaveBeenCalled()
+      expect(mockSftp.get).not.toHaveBeenCalled()
+    })
+
+    test('returns false when no summary filename provided', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return {
+              add: jest.fn().mockReturnValue(mockCutoffTime)
+            }
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest
+          .fn()
+          .mockReturnValueOnce(false) // Before cutoff initially
+          .mockReturnValue(true), // Past cutoff on second check
+        format: jest.fn().mockReturnValue('2025-09-25 15:00:00'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      dayjs
+        .mockReturnValueOnce({
+          tz: jest.fn().mockReturnValue({
+            startOf: jest.fn().mockReturnValue(mockTodayObj)
+          })
+        })
+        .mockReturnValue({
+          tz: jest.fn().mockReturnValue(mockNowObj)
+        })
+
+      // Mock SFTP to return files, but summaryFilename is null/undefined
+      mockSftp.list.mockResolvedValue([{ name: 'summary_20250925.TXT' }])
+
+      await pollUntilFound({
+        type: 'summary',
+        summaryFilename: null, // No summary filename provided
+        logger: mockLogger,
+        summaryCol: mockSummaryCol,
+        parseForecastSummaryTxt: mockParseForecastSummaryTxt,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      // Should not call parsing function since no summary filename
+      expect(mockParseForecastSummaryTxt).not.toHaveBeenCalled()
+      expect(mockSummaryCol.replaceOne).not.toHaveBeenCalled()
+      expect(mockSftp.get).not.toHaveBeenCalled()
+    })
   })
 })

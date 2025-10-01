@@ -56,8 +56,11 @@ function processSectionLine(line, sectionHeaders, bufferManager) {
     bufferManager.hasBuffer()
   ) {
     bufferManager.flushBuffer()
+  } else {
+    // Handle lines that don't match any condition
+    // (e.g., lines before any section is set, or empty lines with no buffer)
+    // No action needed - just ignore these lines
   }
-  // Note: Removed the unnecessary else block with empty comment
 }
 
 export function parseForecastSummaryTxt(txt) {
