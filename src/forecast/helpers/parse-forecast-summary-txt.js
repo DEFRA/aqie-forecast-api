@@ -28,7 +28,8 @@ function extractIssueDate(lines, result) {
       const dateStr = match[1].replace(/^[A-Za-z]+, /, '').trim()
       const timeStr = match[2].trim()
       const dateObj = new Date(`${dateStr} ${timeStr}`)
-      if (!isNaN(dateObj)) {
+      if (!Number.isNaN(dateObj.getTime())) {
+        // Fixed: Use Number.isNaN and check getTime()
         const pad = (n) => n.toString().padStart(2, '0')
         result.issue_date = `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:00`
       }
@@ -55,10 +56,8 @@ function processSectionLine(line, sectionHeaders, bufferManager) {
     bufferManager.hasBuffer()
   ) {
     bufferManager.flushBuffer()
-  } else {
-    // Handle all other cases - lines that don't match any condition
-    // This ensures the if-else chain is complete
   }
+  // Note: Removed the unnecessary else block with empty comment
 }
 
 export function parseForecastSummaryTxt(txt) {
