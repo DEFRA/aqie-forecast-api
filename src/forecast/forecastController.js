@@ -4,6 +4,8 @@ import { config } from '../config.js'
 import { createLogger } from '../common/helpers/logging/logger.js'
 
 const logger = createLogger()
+const HTTP_STATUS_OK = 200
+
 const forecastController = {
   handler: async (request, h) => {
     const forecasts = await getForecastsFromDB(request.db)
@@ -16,7 +18,7 @@ const forecastController = {
         forecasts,
         'forecast-summary': forecastSummary
       })
-      .code(200)
+      .code(HTTP_STATUS_OK)
       .header('Access-Control-Allow-Origin', allowOriginUrl)
   }
 }
