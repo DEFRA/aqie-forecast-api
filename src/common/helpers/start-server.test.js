@@ -58,7 +58,7 @@ describe('#startServer', () => {
       jest.clearAllMocks()
     })
 
-  test.skip('Should start up server as expected', async () => {
+    test.skip('Should start up server as expected', async () => {
       // Ensure spies and imports are available in this scope
       if (!createServerSpy || !startServerImport) {
         createServerImport = await import('../../server.js')
