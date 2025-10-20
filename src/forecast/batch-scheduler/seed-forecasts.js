@@ -1,5 +1,5 @@
-import { schedule } from 'node-cron'
-import { config } from '../../config.js'
+// import { schedule } from 'node-cron'
+// import { config } from '../../config.js'
 import { createLogger } from '../../common/helpers/logging/logger.js'
 import { runForecastSyncJob } from './runForecastSyncJob.js'
 
@@ -14,7 +14,7 @@ const seedForecastScheduler = {
       const logger = createLogger()
       try {
         logger.info('starting forecasts Scheduler')
-        cronJob = schedule(config.get('forecastSchedule'), async () => {})
+        // cronJob = schedule(config.get('forecastSchedule'), async () => {})
         logger.info('Cron job triggered')
         logger.info('Inital forecasts Scheduler done! Running at 5am')
         try {

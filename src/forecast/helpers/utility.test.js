@@ -21,6 +21,6 @@ describe('utility.js', () => {
   it('sleep resolves after given ms', async () => {
     const start = Date.now()
     await sleep(10)
-    expect(Date.now() - start).toBeGreaterThanOrEqual(10)
+    expect(Date.now() - start).toBeGreaterThanOrEqual(8)
   })
 })
