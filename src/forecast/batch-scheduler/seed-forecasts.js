@@ -14,16 +14,15 @@ const seedForecastScheduler = {
       const logger = createLogger()
       try {
         logger.info('starting forecasts Scheduler')
-        cronJob = schedule(config.get('forecastSchedule'), async () => {
-          logger.info('Cron job triggered')
-          logger.info('Inital forecasts Scheduler done! Running at 5am')
-          try {
-            await runForecastSyncJob(server)
-          } catch (error) {
-            logger.error(`[Cron Job Error]`, error)
-            throw error instanceof Error ? error : new Error(String(error))
-          }
-        })
+        cronJob = schedule(config.get('forecastSchedule'), async () => {})
+        logger.info('Cron job triggered')
+        logger.info('Inital forecasts Scheduler done! Running at 5am')
+        try {
+          await runForecastSyncJob(server)
+        } catch (error) {
+          logger.error(`[Cron Job Error]`, error)
+          throw error instanceof Error ? error : new Error(String(error))
+        }
         // Stop the cron job when the server stops
         server.ext('onPostStop', () => {
           if (cronJob) {
