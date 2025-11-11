@@ -3,6 +3,7 @@ import dayjs from 'dayjs'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter'
+import { config } from '../../config.js'
 
 dayjs.extend(utc)
 dayjs.extend(timezone)
@@ -229,10 +230,10 @@ describe('pollUntilFound', () => {
       // Verify SFTP operations
       expect(mockConnectSftp).toHaveBeenCalledTimes(1)
       expect(mockSftp.list).toHaveBeenCalledWith(
-        '/Incoming Shares/AQIE/MetOffice/'
+        config.get('metOfficeDirectory')
       )
       expect(mockSftp.get).toHaveBeenCalledWith(
-        '/Incoming Shares/AQIE/MetOffice/MetOfficeDefraAQSites_20250925.xml'
+        `${config.get('metOfficeDirectory')}MetOfficeDefraAQSites_20250925.xml`
       )
       expect(mockSftp.end).toHaveBeenCalledTimes(1)
 
@@ -462,10 +463,10 @@ describe('pollUntilFound', () => {
       // Verify SFTP operations occurred
       expect(mockConnectSftp).toHaveBeenCalledTimes(1)
       expect(mockSftp.list).toHaveBeenCalledWith(
-        '/Incoming Shares/AQIE/MetOffice/'
+        config.get('metOfficeDirectory')
       )
       expect(mockSftp.get).toHaveBeenCalledWith(
-        '/Incoming Shares/AQIE/MetOffice/MetOfficeDefraAQSites_20250925.xml'
+        `${config.get('metOfficeDirectory')}MetOfficeDefraAQSites_20250925.xml`
       )
 
       // Verify parsing was attempted
