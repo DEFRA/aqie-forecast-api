@@ -84,7 +84,7 @@ async function connectLocalSftp() {
     host: 'sftp22.sftp-defra-gov-uk.quatrix.it',
     port: 22,
     username: 'q2031671',
-    privateKey: fs.readFileSync('C:/Users/2391613/Documents/met_office_rsa_v1') // Replace with correct path
+    privateKey: fs.readFileSync('C:/Users/486272/.ssh/met_office_rsa_v1') // Replace with correct path
   }
   try {
     await sftp.connect(localConfig)

@@ -260,7 +260,7 @@ export const pollUntilFound = async ({
   const cutoffTime = today.add(TWENTY_THREE, 'hour').add(THIRTY, 'minute')
   const alertTimes = getAlertTimes(today)
   const alertsSent = new Set()
-  const remotePath = `/Incoming Shares/AQIE/MetOffice/`
+  const remotePath = config.get('metOfficeDirectory')
 
   logger.info(
     `[Polling Start] Will stop polling at: ${cutoffTime.format('YYYY-MM-DD HH:mm:ss')} (${TIMEZONE})`

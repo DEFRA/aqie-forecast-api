@@ -102,6 +102,12 @@ const config = convict({
     default: 900000,
     env: 'FORECAST_RETRY_INTERVAL'
   },
+  metOfficeDirectory: {
+    doc: 'met office sftp directory to fetch forecast data from',
+    format: String,
+    default: '/Incoming Shares/AQIE/MetOffice/',
+    env: 'MET_OFFICE_DIRECTORY'
+  },
   sftpPrivateKey: {
     doc: 'SSH Private Key - To Fetch Met Office Data From SFTP DEFRA Server',
     format: String,
