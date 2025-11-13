@@ -33,10 +33,9 @@ async function runForecastSyncJob(server) {
 
   // Acquire locks for both collections to prevent concurrent jobs
   const forecastLock = await server.locker.lock(COLLECTION_NAME)
-  const summaryLock = await server.locker.lock(SUMMARY_COLLECTION_NAME)
   logger.info(`:::::::LOCKED (forecast & summary):::::::`)
-  if (!forecastLock || !summaryLock) {
-    logger.error(`Failed to acquire lock for resource - forecasts or summary`)
+  if (!forecastLock) {
+    logger.error(`Failed to acquire lock for resource - forecasts`)
     return null
   }
 
