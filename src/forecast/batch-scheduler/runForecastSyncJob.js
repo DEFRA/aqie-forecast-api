@@ -134,7 +134,6 @@ async function runForecastSyncJob(server) {
   } finally {
     logger.info(`::::::::::UNLOCKED (forecast & summary)::::::::`)
     await forecastLock.free()
-    await summaryLock.free()
   }
 }
 
