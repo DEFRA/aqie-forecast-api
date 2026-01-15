@@ -4,9 +4,9 @@ on:
   pull_request:
     branches:
       - main
+      - minimal
     types:
       - opened
-      - edited
       - reopened
       - synchronize
       - ready_for_review
@@ -33,11 +33,12 @@ jobs:
       - name: Test Docker Image Build
         run: |
           set +e
-          docker build --no-cache --tag cdp-node-backend-template .
+          docker build --no-cache --tag aqie-forecast-api .
           exit $?
-      - name: SonarCloud Scan
-        if: github.actor != 'dependabot[bot]'
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+#      - name: SonarCloud Scan
+#        if: github.actor != 'dependabot[bot]'
+#        uses: SonarSource/sonarqube-scan-action@v5.2.0 #  (or check latest version on https://github.com/marketplace/actions/official-sonarqube-scan)
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
