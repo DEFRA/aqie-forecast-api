@@ -128,7 +128,7 @@ async function processSummary({
     return false
   }
   const summaryFileFound = files.find(
-    (f) => f.name.startsWith(summaryFilename) && f.name.endsWith('.TXT')
+    (f) => f.name.startsWith(summaryFilename) && /\.txt$/i.test(f.name)
   )
   logger.info(
     `[SFTP] Summary File Match ${JSON.stringify(summaryFileFound)} found.`
@@ -143,6 +143,17 @@ async function processSummary({
   const fileContent = await sftp.get(`${remotePath}${summaryFileFound.name}`)
   try {
     const parsed = parseForecastSummaryTxt(fileContent.toString())
+    logger.info(`parsed content - ${JSON.stringify(parsed)}`)
+    const currentDate = dayjs().tz(TIMEZONE).format('YYYY-MM-DD')
+    const issueDate = dayjs(parsed.issue_date).format('YYYY-MM-DD')
+
+    if (issueDate !== currentDate) {
+      logger.info(
+        `[SFTP] Summary file ${summaryFileFound.name} has outdated issue_date: ${issueDate}. Expected: ${currentDate}. Skipping.`
+      )
+      return false
+    }
+
     await summaryCol.replaceOne(
       { type: 'latest' },
       {
