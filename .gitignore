@@ -1,5 +1,7 @@
 .DS_Store
 .npm/
+.env
+.key
 .vscode
 .idea
 .server
@@ -11,4 +13,4 @@ coverage
 
 # @shelf/jest-mongodb generated file
 globalConfig.json
-.husky/pre-commit
+.husky/pre-commit.key

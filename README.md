@@ -1,28 +1,27 @@
 # aqie-forecast-api
 
-Core delivery platform Node.js Backend Template.
+Node.js API service that serves air quality forecast data stored in MongoDB, populated by a scheduled batch job fetching from the Met Office SFTP server.
 
 - [Requirements](#requirements)
   - [Node.js](#nodejs)
+  - [Docker](#docker)
 - [Local development](#local-development)
   - [Setup](#setup)
+  - [Environment variables](#environment-variables)
   - [Development](#development)
-  - [Testing](#testing)
+    - [Docker Compose](#docker-compose)
   - [Production](#production)
+    - [Docker Compose](#docker-compose-1)
+    - [npm](#npm-1)
   - [Npm scripts](#npm-scripts)
-  - [Update dependencies](#update-dependencies)
-  - [Formatting](#formatting)
-    - [Windows prettier issue](#windows-prettier-issue)
 - [API endpoints](#api-endpoints)
+- [Calling API endpoints](#calling-api-endpoints)
+  - [curl](#curl)
 - [Development helpers](#development-helpers)
   - [MongoDB Locks](#mongodb-locks)
   - [Proxy](#proxy)
-- [Docker](#docker)
-  - [Development image](#development-image)
-  - [Production image](#production-image)
-  - [Docker Compose](#docker-compose)
-  - [Dependabot](#dependabot)
-  - [SonarCloud](#sonarcloud)
+- [Dependabot](#dependabot)
+- [SonarCloud](#sonarcloud)
 - [Licence](#licence)
   - [About the licence](#about-the-licence)
 
@@ -40,35 +39,106 @@ cd aqie-forecast-api
 nvm use
 ```
 
+### Docker
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) (includes Docker Compose). Docker is the recommended way to run the service locally as it starts MongoDB, Redis and Localstack automatically alongside the app.
+
 ## Local development
 
 ### Setup
 
+Copy the environment variable template and fill in the required values:
+
+```bash
+cp .env.example .env
+```
+
 Install application dependencies:
 
 ```bash
-npm install
+npm install --ignorescripts
 ```
+
+### Environment variables
+
+This project uses [convict](https://github.com/mozilla/node-convict) for configuration.
+
+- **Via Docker Compose:** the `.env` file is loaded automatically via the `env_file` directive in `compose.yml` — no extra steps needed.
+
+| Variable                          | Required | Description                                                                              |
+| :-------------------------------- | :------: | :--------------------------------------------------------------------------------------- |
+| `SSH_PRIVATE_KEY`                 |    ✅    | SSH private key for Met Office SFTP access (required for forecast data seeding)          |
+| `MET_OFFICE_DIRECTORY`            |          | SFTP directory to fetch forecast data from (default: `/Incoming Shares/AQIE/MetOffice/`) |
+| `FORECAST_SCHEDULE`               |          | Cron expression for forecast data polling (default: `00 04 * * *` — 4am daily)           |
+| `FORECAST_RETRY_INTERVAL`         |          | Retry poll interval in ms if file not found (default: `900000` — 15 minutes)             |
+| `ACCESS_CONTROL_ALLOW_ORIGIN_URL` |          | Allowed CORS origin URL                                                                  |
+| `HTTP_PROXY`                      |          | HTTP proxy URL                                                                           |
+
+All other configuration values have sensible defaults — see [src/config.js](src/config.js) for the full list.
+
+#### Setting up the SSH private key for Met Office SFTP
+
+The `SSH_PRIVATE_KEY` environment variable must contain the **base64-encoded full PEM text** (including headers) of your OpenSSH private key. Follow these steps to prepare it:
+
+1. **Add `.key` to `.gitignore`** to prevent accidentally committing the private key:
+
+   ```bash
+   echo ".key" >> .gitignore
+   ```
+
+2. **Create a `.key` file** in the project root and paste the key **body only** (without `-----BEGIN ...-----` or `-----END ...-----` headers)
+
+3. **Convert to the correct format** using this command:
+
+   ```bash
+   BODY=$(cat .key | tr -d '\n')
+   PEM="-----BEGIN OPENSSH PRIVATE KEY-----
+   ${BODY}
+   -----END OPENSSH PRIVATE KEY-----"
+   ENCODED=$(echo "$PEM" | base64 | tr -d '\n')
+   echo "SSH_PRIVATE_KEY=${ENCODED}"
+   ```
+
+4. **Copy the output** from step 3 and paste it into your `.env` file:
+
+   ```bash
+   SSH_PRIVATE_KEY=LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0K...rest of encoded key...
+   ```
+
+   **Important:** The key must be on a **single line** with no line breaks, and must include the base64-encoded PEM headers (`-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`).
+
+5. **Verify** the key decodes correctly:
+
+   ```bash
+   grep 'SSH_PRIVATE_KEY' .env | sed 's/SSH_PRIVATE_KEY=//' | base64 --decode | head -1
+   # Should output: -----BEGIN OPENSSH PRIVATE KEY-----
+   ```
 
 ### Development
 
-To run the application in `development` mode run:
+#### Docker Compose
+
+The recommended way to run the project locally. Starts MongoDB, Localstack and the app together, with hot-reloading enabled. Requires a `.env` file at the project root (see [Setup](#setup) and [Environment variables](#environment-variables)):
 
 ```bash
-npm run dev
-```
-
-### Testing
-
-To test the application run:
-
-```bash
-npm run test
+docker compose up --build
 ```
 
 ### Production
 
-To mimic the application running in `production` mode locally run:
+#### Docker Compose
+
+To run the production image locally with all dependencies (MongoDB, Localstack):
+
+```bash
+docker compose up --build
+```
+
+> **Note:** The default compose target is `development`. To run the production image, build and tag it separately, then update `compose.yml` to reference your image.
+
+#### npm
+
+> **Note:** requires MongoDB running on `mongodb://127.0.0.1:27017/`.
 
 ```bash
 npm start
@@ -83,34 +153,28 @@ To view them in your command line run:
 npm run
 ```
 
-### Update dependencies
-
-To update dependencies use [npm-check-updates](https://github.com/raineorshine/npm-check-updates):
-
-> The following script is a good start. Check out all the options on
-> the [npm-check-updates](https://github.com/raineorshine/npm-check-updates)
-
-```bash
-ncu --interactive --format group
-```
-
-### Formatting
-
-#### Windows prettier issue
-
-If you are having issues with formatting of line breaks on Windows update your global git config by running:
-
-```bash
-git config --global core.autocrlf false
-```
-
 ## API endpoints
 
-| Endpoint             | Description                    |
-| :------------------- | :----------------------------- |
-| `GET: /health`       | Health                         |
-| `GET: /example    `  | Example API (remove as needed) |
-| `GET: /example/<id>` | Example API (remove as needed) |
+| Endpoint         | Description                                                                 |
+| :--------------- | :-------------------------------------------------------------------------- |
+| `GET: /health`   | Health check                                                                |
+| `GET: /forecast` | Returns air quality forecasts from MongoDB (populated by cron at 4am daily) |
+
+## Calling API endpoints
+
+> The default port is `3001`.
+
+### curl
+
+```bash
+# Health check
+curl http://localhost:3001/health
+
+# Air quality forecasts — reads from MongoDB, returns empty until populated by the cron job (runs at 4am)
+# To populate immediately, set FORECAST_SCHEDULE=* * * * * in your .env and restart the service.
+# Remember to revert it afterwards.
+curl http://localhost:3001/forecast
+```
 
 ## Development helpers
 
@@ -179,56 +243,12 @@ return await fetch(url, {
 })
 ```
 
-## Docker
-
-### Development image
-
-Build:
-
-```bash
-docker build --target development --no-cache --tag aqie-forecast-api:development .
-```
-
-Run:
-
-```bash
-docker run -e PORT=3001 -p 3001:3001 aqie-forecast-api:development
-```
-
-### Production image
-
-Build:
-
-```bash
-docker build --no-cache --tag aqie-forecast-api .
-```
-
-Run:
-
-```bash
-docker run -e PORT=3001 -p 3001:3001 aqie-forecast-api
-```
-
-### Docker Compose
-
-A local environment with:
-
-- Localstack for AWS services (S3, SQS)
-- Redis
-- MongoDB
-- This service.
-- A commented out frontend example.
-
-```bash
-docker compose up --build -d
-```
-
-### Dependabot
+## Dependabot
 
 We have added an example dependabot configuration file to the repository. You can enable it by renaming
 the [.github/example.dependabot.yml](.github/example.dependabot.yml) to `.github/dependabot.yml`
 
-### SonarCloud
+## SonarCloud
 
 Instructions for setting up SonarCloud can be found in [sonar-project.properties](./sonar-project.properties)
 
