@@ -8,10 +8,37 @@ import http from 'node:http'
 import { PROXY_PORT, SFTP_HOST, SFTP_PORT, SUCCESS_CODE } from './constant.js'
 const logger = createLogger()
 
+function getPrivateKeyFromConfig() {
+  const privateKeyBase64 = config.get('sftpPrivateKey')
+  return Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
+}
+
+function isHttpProxyConfigured() {
+  const proxy = config.get('httpProxy')
+  return Boolean(proxy && proxy.trim())
+}
+
 /**
  * Creates an SFTP client via CDP proxy and returns a connected SFTP instance.
  */
 async function connectSftpThroughProxy() {
+  const privateKey = getPrivateKeyFromConfig()
+
+  if (!isHttpProxyConfigured()) {
+    logger.info(
+      '[SFTP] HTTP_PROXY is empty; connecting directly to SFTP endpoint.'
+    )
+    const sftp = new SFTPClient()
+    await sftp.connect({
+      host: SFTP_HOST,
+      port: SFTP_PORT,
+      username: 'q2031671',
+      privateKey
+    })
+    logger.info('[SFTP] Direct connection established')
+    return { sftp }
+  }
+
   const proxyUrl = new URL(config.get('httpProxy'))
   const proxyHost = proxyUrl.hostname
   const proxyPort = proxyUrl.port || PROXY_PORT
@@ -29,18 +56,11 @@ async function connectSftpThroughProxy() {
       Host: `${SFTP_HOST}:${SFTP_PORT}`
     }
   }
-  const privateKeyBase64 = config.get('sftpPrivateKey')
-  const privateKey = Buffer.from(privateKeyBase64, 'base64').toString('utf-8')
 
   return new Promise((resolve, reject) => {
     logger.info(`inside Promise`)
     const req = http.request(proxyOptions)
-    logger.info(`Before REQUEST:: ${JSON.stringify(req)}`)
-    req.path = `${SFTP_HOST}:${SFTP_PORT}`
-    logger.info(`After REQUEST:: ${JSON.stringify(req)}`)
     req.on('connect', async (res, socket) => {
-      logger.info(`SOCKET:: ${JSON.stringify(socket)}`)
-      logger.info(`RESPONSE:: ${JSON.stringify(res)}`)
       if (res.statusCode !== SUCCESS_CODE) {
         reject(
           new Error(
