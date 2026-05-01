@@ -40,6 +40,16 @@ services:
       - mongodb-data:/data
     restart: always
 
+  squid:
+    image: ubuntu/squid:latest
+    ports:
+      - '3128:3128'
+    volumes:
+      - ./compose/squid.conf:/etc/squid/squid.conf:ro
+    restart: always
+    networks:
+      - cdp-tenant
+
   ################################################################################
 
   # frontend:
@@ -74,18 +84,23 @@ services:
     links:
       - 'localstack:localstack'
       - 'mongodb:mongodb'
+      - 'squid:squid'
     depends_on:
       localstack:
         condition: service_healthy
       mongodb:
         condition: service_started
+      squid:
+        condition: service_started
     env_file:
-      - 'compose/aws.env'
+      - path: .env
+        required: true
     environment:
       PORT: 3001
       NODE_ENV: development
       LOCALSTACK_ENDPOINT: http://localstack:4566
       MONGO_URI: mongodb://mongodb:27017/
+      HTTP_PROXY: http://squid:3128
     networks:
       - cdp-tenant
     volumes:
