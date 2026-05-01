@@ -105,14 +105,7 @@ The `SSH_PRIVATE_KEY` environment variable must contain the **base64-encoded ful
    SSH_PRIVATE_KEY=LS0tLS1CRUdJTiBPUEVOU1NIIFBSSVZBVEUgS0VZLS0tLS0K...rest of encoded key...
    ```
 
-   **Important:** The key must be on a **single line** with no line breaks, and must include the base64-encoded PEM headers (`-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`).
-
-5. **Verify** the key decodes correctly:
-
-   ```bash
-   grep 'SSH_PRIVATE_KEY' .env | sed 's/SSH_PRIVATE_KEY=//' | base64 --decode | head -1
-   # Should output: -----BEGIN OPENSSH PRIVATE KEY-----
-   ```
+You can now run the docker commands in the section below
 
 ### Development
 
