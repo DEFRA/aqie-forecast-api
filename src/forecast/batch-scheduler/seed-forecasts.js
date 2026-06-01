@@ -5,7 +5,7 @@ import { runForecastSyncJob } from './runForecastSyncJob.js'
 
 let cronJob // store the job reference
 
-// Schedule it to run daily at 5:00 AM
+// Runs the forecast & summary sync on the schedule configured by FORECAST_SCHEDULE
 const seedForecastScheduler = {
   plugin: {
     name: 'Seed Forecast Scheduler',
@@ -15,8 +15,9 @@ const seedForecastScheduler = {
       try {
         logger.info('starting forecasts Scheduler')
         cronJob = schedule(config.get('forecastSchedule'), async () => {
-          logger.info('Cron job triggered')
-          logger.info('Inital forecasts Scheduler done! Running at 5am')
+          logger.info(
+            `Forecast & summary sync triggered by schedule '${config.get('forecastSchedule')}'`
+          )
           try {
             await runForecastSyncJob(server)
           } catch (error) {
