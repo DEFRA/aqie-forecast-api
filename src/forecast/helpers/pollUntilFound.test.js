@@ -729,6 +729,231 @@ describe('pollUntilFound', () => {
       expect(mockSftp.get).not.toHaveBeenCalled()
     })
 
+    test('processes summary file successfully when issue_date matches today', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return { add: jest.fn().mockReturnValue(mockCutoffTime) }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest.fn().mockReturnValueOnce(false).mockReturnValue(true),
+        format: jest.fn().mockReturnValue('2025-09-25'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      // dayjs() (no arg) drives setup + the polling loop; dayjs(issue_date)
+      // (with arg) is only used to format the parsed summary issue date.
+      let noArgCall = 0
+      dayjs.mockImplementation((arg) => {
+        if (arg !== undefined) {
+          return { format: jest.fn().mockReturnValue('2025-09-25') }
+        }
+        noArgCall += 1
+        if (noArgCall === 1) {
+          return {
+            tz: jest.fn().mockReturnValue({
+              startOf: jest.fn().mockReturnValue(mockTodayObj)
+            })
+          }
+        }
+        return { tz: jest.fn().mockReturnValue(mockNowObj) }
+      })
+
+      mockSftp.list.mockResolvedValue([
+        { name: 'EMARC_AirQualityForecast_2025-09-25-1030.txt' }
+      ])
+      mockSftp.get.mockResolvedValue('summary content')
+      mockParseForecastSummaryTxt.mockReturnValue({
+        issue_date: '2025-09-25 09:00:00',
+        today: 'Good',
+        tomorrow: 'Good',
+        outlook: 'Good'
+      })
+
+      await pollUntilFound({
+        type: 'summary',
+        summaryFilename: 'EMARC_AirQualityForecast_2025-09-25-',
+        logger: mockLogger,
+        summaryCol: mockSummaryCol,
+        parseForecastSummaryTxt: mockParseForecastSummaryTxt,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      expect(mockSftp.get).toHaveBeenCalledWith(
+        `${config.get('metOfficeDirectory')}EMARC_AirQualityForecast_2025-09-25-1030.txt`
+      )
+      expect(mockParseForecastSummaryTxt).toHaveBeenCalledWith(
+        'summary content'
+      )
+      expect(mockSummaryCol.replaceOne).toHaveBeenCalledWith(
+        { type: 'latest' },
+        expect.objectContaining({
+          type: 'latest',
+          name: 'EMARC_AirQualityForecast_2025-09-25-1030.txt',
+          issue_date: '2025-09-25 09:00:00',
+          updated: expect.any(Date)
+        }),
+        { upsert: true }
+      )
+      // Found on the first attempt, so no retry sleep
+      expect(mockSleep).not.toHaveBeenCalled()
+    })
+
+    test('skips summary file when issue_date is not today', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return { add: jest.fn().mockReturnValue(mockCutoffTime) }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest.fn().mockReturnValueOnce(false).mockReturnValue(true),
+        format: jest.fn().mockReturnValue('2025-09-25'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      let noArgCall = 0
+      dayjs.mockImplementation((arg) => {
+        if (arg !== undefined) {
+          // Parsed issue date resolves to yesterday
+          return { format: jest.fn().mockReturnValue('2025-09-24') }
+        }
+        noArgCall += 1
+        if (noArgCall === 1) {
+          return {
+            tz: jest.fn().mockReturnValue({
+              startOf: jest.fn().mockReturnValue(mockTodayObj)
+            })
+          }
+        }
+        return { tz: jest.fn().mockReturnValue(mockNowObj) }
+      })
+
+      mockSftp.list.mockResolvedValue([
+        { name: 'EMARC_AirQualityForecast_2025-09-25-1030.txt' }
+      ])
+      mockSftp.get.mockResolvedValue('summary content')
+      mockParseForecastSummaryTxt.mockReturnValue({
+        issue_date: '2025-09-24 09:00:00'
+      })
+
+      await pollUntilFound({
+        type: 'summary',
+        summaryFilename: 'EMARC_AirQualityForecast_2025-09-25-',
+        logger: mockLogger,
+        summaryCol: mockSummaryCol,
+        parseForecastSummaryTxt: mockParseForecastSummaryTxt,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      // Outdated issue date => not stored, keeps polling until cutoff
+      expect(mockSummaryCol.replaceOne).not.toHaveBeenCalled()
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('has outdated issue_date')
+      )
+      expect(mockSleep).toHaveBeenCalledWith(100)
+    })
+
+    test('handles TXT parsing errors in processSummary', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return { add: jest.fn().mockReturnValue(mockCutoffTime) }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest.fn().mockReturnValueOnce(false).mockReturnValue(true),
+        format: jest.fn().mockReturnValue('2025-09-25'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      dayjs
+        .mockReturnValueOnce({
+          tz: jest.fn().mockReturnValue({
+            startOf: jest.fn().mockReturnValue(mockTodayObj)
+          })
+        })
+        .mockReturnValue({
+          tz: jest.fn().mockReturnValue(mockNowObj)
+        })
+
+      mockSftp.list.mockResolvedValue([
+        { name: 'EMARC_AirQualityForecast_2025-09-25-1030.txt' }
+      ])
+      mockSftp.get.mockResolvedValue('bad content')
+      const txtError = new Error('TXT parsing failed')
+      mockParseForecastSummaryTxt.mockImplementation(() => {
+        throw txtError
+      })
+
+      await pollUntilFound({
+        type: 'summary',
+        summaryFilename: 'EMARC_AirQualityForecast_2025-09-25-',
+        logger: mockLogger,
+        summaryCol: mockSummaryCol,
+        parseForecastSummaryTxt: mockParseForecastSummaryTxt,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        '[TXT Parsing Error] Summary file found but could not be parsed: TXT parsing failed',
+        txtError
+      )
+      expect(mockSummaryCol.replaceOne).not.toHaveBeenCalled()
+    })
+
     test('returns false when no summary filename provided', async () => {
       const mockCutoffTime = {
         format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
@@ -782,6 +1007,289 @@ describe('pollUntilFound', () => {
       expect(mockParseForecastSummaryTxt).not.toHaveBeenCalled()
       expect(mockSummaryCol.replaceOne).not.toHaveBeenCalled()
       expect(mockSftp.get).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('additional branch coverage', () => {
+    test('defaults type to "both" when type is not provided', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return { add: jest.fn().mockReturnValue(mockCutoffTime) }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest.fn().mockReturnValue(true), // past cutoff immediately
+        format: jest.fn().mockReturnValue('2025-09-25'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      dayjs
+        .mockReturnValueOnce({
+          tz: jest.fn().mockReturnValue({
+            startOf: jest.fn().mockReturnValue(mockTodayObj)
+          })
+        })
+        .mockReturnValue({
+          tz: jest.fn().mockReturnValue(mockNowObj)
+        })
+
+      // No `type` provided => defaults to 'both'
+      await pollUntilFound({
+        filename: 'forecast.xml',
+        summaryFilename: 'EMARC_AirQualityForecast_2025-09-25-',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        summaryCol: mockSummaryCol,
+        parseForecastSummaryTxt: mockParseForecastSummaryTxt,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      // Past cutoff on the very first check, so we never connect
+      expect(mockConnectSftp).not.toHaveBeenCalled()
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining('[Polling Ended]')
+      )
+    })
+
+    test('wraps non-Error thrown while parsing the forecast file', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return { add: jest.fn().mockReturnValue(mockCutoffTime) }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest.fn().mockReturnValueOnce(false).mockReturnValue(true),
+        format: jest.fn().mockReturnValue('2025-09-25'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      dayjs
+        .mockReturnValueOnce({
+          tz: jest.fn().mockReturnValue({
+            startOf: jest.fn().mockReturnValue(mockTodayObj)
+          })
+        })
+        .mockReturnValue({
+          tz: jest.fn().mockReturnValue(mockNowObj)
+        })
+
+      mockSftp.list.mockResolvedValue([{ name: 'forecast.xml' }])
+      mockSftp.get.mockResolvedValue('xml content')
+      // Reject with a non-Error value to exercise the String() wrapping branch
+      mockParseForecastXml.mockRejectedValue('xml-not-an-error')
+
+      await pollUntilFound({
+        type: 'forecast',
+        filename: 'forecast.xml',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('[XML Parsing Error]'),
+        'xml-not-an-error'
+      )
+      expect(mockForecastsCol.bulkWrite).not.toHaveBeenCalled()
+      expect(mockSleep).toHaveBeenCalled()
+    })
+
+    test('wraps non-Error thrown while parsing the summary file', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return { add: jest.fn().mockReturnValue(mockCutoffTime) }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest.fn().mockReturnValueOnce(false).mockReturnValue(true),
+        format: jest.fn().mockReturnValue('2025-09-25'),
+        isSameOrAfter: jest.fn().mockReturnValue(false)
+      }
+
+      dayjs
+        .mockReturnValueOnce({
+          tz: jest.fn().mockReturnValue({
+            startOf: jest.fn().mockReturnValue(mockTodayObj)
+          })
+        })
+        .mockReturnValue({
+          tz: jest.fn().mockReturnValue(mockNowObj)
+        })
+
+      mockSftp.list.mockResolvedValue([
+        { name: 'EMARC_AirQualityForecast_2025-09-25-1030.txt' }
+      ])
+      mockSftp.get.mockResolvedValue('summary content')
+      // Throw a non-Error value to exercise the String() wrapping branch
+      mockParseForecastSummaryTxt.mockImplementation(() => {
+        // eslint-disable-next-line no-throw-literal
+        throw 'txt-not-an-error'
+      })
+
+      await pollUntilFound({
+        type: 'summary',
+        summaryFilename: 'EMARC_AirQualityForecast_2025-09-25-',
+        logger: mockLogger,
+        summaryCol: mockSummaryCol,
+        parseForecastSummaryTxt: mockParseForecastSummaryTxt,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('[TXT Parsing Error]'),
+        'txt-not-an-error'
+      )
+      expect(mockSummaryCol.replaceOne).not.toHaveBeenCalled()
+      expect(mockSleep).toHaveBeenCalled()
+    })
+
+    test('logs the generic alert without listing files once both are found', async () => {
+      const mockCutoffTime = {
+        format: jest.fn().mockReturnValue('2025-09-25 23:30:00')
+      }
+      const mockAlertTime1 = { format: jest.fn().mockReturnValue('10:00') }
+      const mockAlertTime2 = { format: jest.fn().mockReturnValue('15:00') }
+
+      const mockTodayObj = {
+        add: jest.fn().mockImplementation((amount, unit) => {
+          if (amount === 23 && unit === 'hour') {
+            return { add: jest.fn().mockReturnValue(mockCutoffTime) }
+          }
+          if (amount === 10 && unit === 'hour') {
+            return mockAlertTime1
+          }
+          if (amount === 15 && unit === 'hour') {
+            return mockAlertTime2
+          }
+          return this
+        }),
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      const mockNowObj = {
+        isAfter: jest.fn().mockReturnValue(false), // never past cutoff
+        isSameOrAfter: jest.fn().mockReturnValue(true), // past both alert times
+        format: jest.fn().mockReturnValue('2025-09-25')
+      }
+
+      let noArgCall = 0
+      dayjs.mockImplementation((arg) => {
+        if (arg !== undefined) {
+          return { format: jest.fn().mockReturnValue('2025-09-25') }
+        }
+        noArgCall += 1
+        if (noArgCall === 1) {
+          return {
+            tz: jest.fn().mockReturnValue({
+              startOf: jest.fn().mockReturnValue(mockTodayObj)
+            })
+          }
+        }
+        return { tz: jest.fn().mockReturnValue(mockNowObj) }
+      })
+
+      mockSftp.list.mockResolvedValue([
+        { name: 'forecast.xml' },
+        { name: 'EMARC_AirQualityForecast_2025-09-25-1030.txt' }
+      ])
+      mockSftp.get.mockResolvedValue('content')
+      mockParseForecastXml.mockResolvedValue([
+        {
+          name: 'site',
+          updated: new Date(),
+          location: { type: 'Point', coordinates: [0, 0] },
+          forecast: []
+        }
+      ])
+      mockParseForecastSummaryTxt.mockReturnValue({
+        issue_date: '2025-09-25 09:00:00',
+        today: 'x',
+        tomorrow: 'y',
+        outlook: 'z'
+      })
+
+      await pollUntilFound({
+        type: 'both',
+        filename: 'forecast.xml',
+        summaryFilename: 'EMARC_AirQualityForecast_2025-09-25-',
+        logger: mockLogger,
+        forecastsCol: mockForecastsCol,
+        parseForecastXml: mockParseForecastXml,
+        summaryCol: mockSummaryCol,
+        parseForecastSummaryTxt: mockParseForecastSummaryTxt,
+        connectSftp: mockConnectSftp,
+        sleep: mockSleep
+      })
+
+      // Both files stored
+      expect(mockForecastsCol.bulkWrite).toHaveBeenCalled()
+      expect(mockSummaryCol.replaceOne).toHaveBeenCalled()
+      // Generic alert is logged, but the "following file(s)" detail is skipped
+      // because there are no missing files.
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Forecast file not uploaded to MetOffice SFTP')
+      )
+      expect(mockLogger.error).not.toHaveBeenCalledWith(
+        expect.stringContaining('The following file(s) were not uploaded')
+      )
+      // Found on the first attempt => no retry sleep
+      expect(mockSleep).not.toHaveBeenCalled()
     })
   })
 })

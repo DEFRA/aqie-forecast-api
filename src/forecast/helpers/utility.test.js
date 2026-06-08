@@ -18,9 +18,21 @@ describe('utility.js', () => {
     )
   })
 
-  it.skip('sleep resolves after given ms', async () => {
-    const start = Date.now()
-    await sleep(9)
-    expect(Date.now() - start).toBeGreaterThanOrEqual(9)
+  it('sleep resolves after the given ms', async () => {
+    jest.useFakeTimers()
+    try {
+      const resolved = jest.fn()
+      const promise = sleep(9).then(resolved)
+
+      // Not resolved before the timer elapses
+      await Promise.resolve()
+      expect(resolved).not.toHaveBeenCalled()
+
+      jest.advanceTimersByTime(9)
+      await promise
+      expect(resolved).toHaveBeenCalled()
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

@@ -10,15 +10,14 @@ import {
   connectLocalSftp
 } from './connectSftpViaProxy.js'
 import SFTPClient from 'ssh2-sftp-client'
-import fs from 'fs'
-import http from 'http'
+import fs from 'node:fs'
+import http from 'node:http'
 import { PROXY_PORT } from './constant.js'
 import { config } from '../../config.js'
 
 jest.mock('ssh2-sftp-client')
-jest.mock('fs')
-jest.mock('http')
-jest.mock('https')
+jest.mock('node:fs')
+jest.mock('node:http')
 jest.mock('../../config.js', () => ({
   config: {
     get: jest.fn()

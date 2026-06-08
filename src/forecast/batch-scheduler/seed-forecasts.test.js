@@ -89,6 +89,21 @@ describe('seedForecastScheduler plugin', () => {
     expect(mockLogger.info).toHaveBeenCalledWith('Stopping forecast scheduler')
   })
 
+  it('should not attempt to stop when no cron job was scheduled', async () => {
+    // schedule returns no job reference, so cronJob stays falsy
+    schedule.mockReturnValueOnce(undefined)
+
+    await seedForecastScheduler.plugin.register(serverMock)
+    const onPostStopHandler = serverMock.ext.mock.calls[0][1]
+
+    onPostStopHandler()
+
+    expect(stopMock).not.toHaveBeenCalled()
+    expect(mockLogger.info).not.toHaveBeenCalledWith(
+      'Stopping forecast scheduler'
+    )
+  })
+
   it('should log and re-throw error if scheduler setup fails', async () => {
     schedule.mockImplementationOnce(() => {
       throw new Error('Scheduler setup failed')
