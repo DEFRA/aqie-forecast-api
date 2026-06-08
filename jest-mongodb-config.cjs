@@ -5,7 +5,8 @@ module.exports = {
     },
     autoStart: false,
     instance: {
-      dbName: 'aqie-forecast-api'
+      dbName: 'aqie-forecast-api',
+      launchTimeout: 60000
     }
   },
   mongoURLEnvName: 'MONGO_URI',

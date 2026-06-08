@@ -1,10 +1,10 @@
 import SFTPClient from 'ssh2-sftp-client'
 import { config } from '../../config.js'
 import { createLogger } from '../../common/helpers/logging/logger.js'
-import { Buffer } from 'buffer'
-import fs from 'fs'
-import { URL } from 'url'
-import http from 'http'
+import { Buffer } from 'node:buffer'
+import fs from 'node:fs'
+import { URL } from 'node:url'
+import http from 'node:http'
 import { PROXY_PORT, SFTP_HOST, SFTP_PORT, SUCCESS_CODE } from './constant.js'
 const logger = createLogger()
 

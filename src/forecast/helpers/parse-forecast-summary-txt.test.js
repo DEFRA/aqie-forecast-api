@@ -52,6 +52,14 @@ describe('parseForecastSummaryTxt', () => {
     expect(result.issue_date).toBeUndefined()
   })
 
+  it('should ignore issue date when the matched value is not a valid date', () => {
+    // Matches the "Issued on ... at <time> Local time" pattern, but the date
+    // part cannot be parsed into a valid Date.
+    const txt = 'Issued on Monday, not-a-real-date at 09:00 Local time'
+    const result = parseForecastSummaryTxt(txt)
+    expect(result.issue_date).toBeUndefined()
+  })
+
   it('should handle multiple lines in a section', () => {
     const txt = `
       Today:

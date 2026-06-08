@@ -28,7 +28,7 @@ export const parseForecastXml = async (xmlString) => {
 
       const forecast = forecastDays.slice(0, FIVE).map((d, index) => ({
         day: baseDate.add(index, 'day').format('ddd'),
-        value: parseInt(d.$.aq)
+        value: Number.parseInt(d.$.aq)
       }))
 
       return {
@@ -36,7 +36,10 @@ export const parseForecastXml = async (xmlString) => {
         updated: baseDate.toDate(),
         location: {
           type: 'Point',
-          coordinates: [parseFloat(site.$.lt), parseFloat(site.$.ln)]
+          coordinates: [
+            Number.parseFloat(site.$.lt),
+            Number.parseFloat(site.$.ln)
+          ]
         },
         forecast
       }

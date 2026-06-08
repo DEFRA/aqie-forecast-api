@@ -29,6 +29,7 @@ dayjs.extend(tz)
 dayjs.extend(isSameOrAfter)
 
 const TIMEZONE = 'Europe/London'
+const DATE_FORMAT = 'YYYY-MM-DD'
 
 function getAlertTimes(today) {
   return [today.add(TEN, 'hour'), today.add(FIFTEEN, 'hour')]
@@ -59,12 +60,12 @@ function logAlerts({
     const alertLabel = alertTime.format('HH:mm')
     if (!alertsSent.has(alertLabel) && now.isSameOrAfter(alertTime)) {
       logger.error(
-        `[Alert] Forecast file not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE})`
+        `[Alert] Forecast file not uploaded to MetOffice SFTP for ${today.format(DATE_FORMAT)} - Time: ${alertLabel} (${TIMEZONE})`
       )
       const missingFiles = getMissingFiles(forecastDone, summaryDone, type)
       if (missingFiles.length > 0) {
         logger.error(
-          `[Alert] The following file(s) were not uploaded to MetOffice SFTP for ${today.format('YYYY-MM-DD')} - Time: ${alertLabel} (${TIMEZONE}): ${missingFiles.join(', ')}.`
+          `[Alert] The following file(s) were not uploaded to MetOffice SFTP for ${today.format(DATE_FORMAT)} - Time: ${alertLabel} (${TIMEZONE}): ${missingFiles.join(', ')}.`
         )
       }
       alertsSent.add(alertLabel)
@@ -144,8 +145,8 @@ async function processSummary({
   try {
     const parsed = parseForecastSummaryTxt(fileContent.toString())
     logger.info(`parsed content - ${JSON.stringify(parsed)}`)
-    const currentDate = dayjs().tz(TIMEZONE).format('YYYY-MM-DD')
-    const issueDate = dayjs(parsed.issue_date).format('YYYY-MM-DD')
+    const currentDate = dayjs().tz(TIMEZONE).format(DATE_FORMAT)
+    const issueDate = dayjs(parsed.issue_date).format(DATE_FORMAT)
 
     if (issueDate !== currentDate) {
       logger.info(

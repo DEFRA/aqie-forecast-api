@@ -40,6 +40,17 @@ describe('Lock Functions', () => {
       )
       expect(locker.lock).toHaveBeenCalledWith(resource)
     })
+
+    test('should return null without logging when no logger is provided', async () => {
+      const resource = 'testResource'
+
+      locker.lock.mockResolvedValue(null)
+
+      const result = await acquireLock(locker, resource)
+
+      expect(result).toBeNull()
+      expect(locker.lock).toHaveBeenCalledWith(resource)
+    })
   })
 
   describe('requireLock', () => {

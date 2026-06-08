@@ -142,13 +142,15 @@ describe('runForecastSyncJob', () => {
     )
   })
 
-  it.skip('should return early if lock is not acquired', async () => {
+  it('should return early if lock is not acquired', async () => {
     mockServer.locker.lock.mockResolvedValueOnce(null)
 
-    await runForecastSyncJob(mockServer)
+    const result = await runForecastSyncJob(mockServer)
 
+    expect(result).toBeNull()
     expect(mockServer.locker.lock).toHaveBeenCalledWith('forecasts')
     expect(mockServer.db.listCollections).not.toHaveBeenCalled()
+    expect(mockFree).not.toHaveBeenCalled()
   })
 
   it('should release lock after successful execution', async () => {
@@ -170,25 +172,6 @@ describe('runForecastSyncJob', () => {
 
     await expect(runForecastSyncJob(mockServer)).rejects.toThrow('DB failure')
     expect(mockFree).toHaveBeenCalled()
-  })
-
-  it.skip('should log an error if lock is not acquired', async () => {
-    const mockError = jest.fn()
-    const mockLogger = {
-      info: jest.fn(),
-      error: mockError
-    }
-    jest.doMock('../../common/helpers/logging/logger.js', () => ({
-      createLogger: () => mockLogger
-    }))
-    const { runForecastSyncJob: runJob } = await import(
-      './runForecastSyncJob.js'
-    )
-    mockServer.locker.lock.mockResolvedValueOnce(null)
-    await runJob(mockServer)
-    expect(mockError).toHaveBeenCalledWith(
-      'Failed to acquire lock for resource - forecasts or summary'
-    )
   })
 
   // --- Additional coverage tests ---
